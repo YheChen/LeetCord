@@ -45,11 +45,23 @@ export interface SlashCommand {
   execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
 }
 
+/** Per-user command cooldowns (in seconds). Unlisted commands have no cooldown. */
+const COMMAND_COOLDOWNS: Partial<Record<string, number>> = {
+  [DISCORD_COMMANDS.ME]: 10,
+  [DISCORD_COMMANDS.DAILY]: 5,
+  [DISCORD_COMMANDS.STREAK]: 10,
+  [DISCORD_COMMANDS.LEADERBOARD]: 10,
+  [DISCORD_COMMANDS.LINK]: 15,
+  [DISCORD_COMMANDS.VERIFY]: 15,
+};
+
 export class DiscordBotService {
   private readonly client: Client;
   private readonly rest: REST;
   private readonly logger = createLogger({ name: 'bot' });
   private readonly commands = new Collection<string, SlashCommand>();
+  /** Map<"userId:commandName", expiry timestamp (ms)> */
+  private readonly cooldowns = new Map<string, number>();
 
   constructor(
     private readonly env: BotEnv,
@@ -104,6 +116,23 @@ export class DiscordBotService {
           ephemeral: true,
         });
         return;
+      }
+
+      // Per-user cooldown check
+      const cooldownSeconds = COMMAND_COOLDOWNS[interaction.commandName];
+      if (cooldownSeconds) {
+        const key = `${interaction.user.id}:${interaction.commandName}`;
+        const now = Date.now();
+        const expiresAt = this.cooldowns.get(key);
+        if (expiresAt && now < expiresAt) {
+          const remaining = Math.ceil((expiresAt - now) / 1000);
+          await interaction.reply({
+            content: `⏳ Please wait **${remaining}s** before using \`/${interaction.commandName}\` again.`,
+            ephemeral: true,
+          });
+          return;
+        }
+        this.cooldowns.set(key, now + cooldownSeconds * 1000);
       }
 
       try {
