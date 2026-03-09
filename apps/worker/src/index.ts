@@ -5,6 +5,11 @@ import { LeetCodeService, StatsSyncService } from '@leetcord/core';
 import { createLeetCodeClient } from '@leetcord/leetcode-client';
 import { createLogger } from '@leetcord/shared';
 import { loadWorkerEnv } from './config/env';
+import { runComputeWeeklyLeaderboardJob } from './jobs/computeWeeklyLeaderboardJob';
+import { runFetchDailyProblemJob } from './jobs/fetchDailyProblemJob';
+import { runPostDailyProblemJob } from './jobs/postDailyProblemJob';
+import { runRefreshDailyCompletionJob } from './jobs/refreshDailyCompletionJob';
+import { runRefreshUserStatsJob } from './jobs/refreshUserStatsJob';
 import { registerDailyScheduler } from './schedulers/dailyScheduler';
 import { registerFrequentSchedulers } from './schedulers/frequentScheduler';
 import { registerWeeklyScheduler } from './schedulers/weeklyScheduler';
@@ -19,10 +24,17 @@ const main = async (): Promise<void> => {
   const statsSyncService = new StatsSyncService(db, leetCodeService);
   const discordRest = new REST({ version: '10' }).setToken(env.DISCORD_TOKEN);
 
+  logger.info('Running startup jobs');
+  await runFetchDailyProblemJob(statsSyncService);
+  await runRefreshUserStatsJob(statsSyncService);
+  await runRefreshDailyCompletionJob(statsSyncService);
+  await runComputeWeeklyLeaderboardJob(db, statsSyncService);
+  await runPostDailyProblemJob(db, discordRest);
+
   registerDailyScheduler({ db, statsSyncService, discordRest });
-  registerFrequentSchedulers({ statsSyncService });
+  registerFrequentSchedulers({ db, statsSyncService, discordRest });
   registerWeeklyScheduler({ db, statsSyncService });
-  logger.info('Worker started and schedulers registered');
+  logger.info('Startup jobs completed; worker schedulers registered');
 };
 
 main().catch((error: unknown) => {

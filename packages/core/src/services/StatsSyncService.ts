@@ -4,21 +4,27 @@ import {
   WeeklyLeaderboardSnapshotPayload,
   createLogger,
   startOfWeekUtc,
-  toDateOnly
+  toDateOnly,
 } from '@leetcord/shared';
 import { LeetCodeService } from './LeetCodeService';
 
 const logger = createLogger({ name: 'core-stats-sync-service' });
 
+export interface NewDailyCompletion {
+  userLinkId: string;
+  discordUserId: string;
+  leetcodeUsername: string;
+}
+
 export class StatsSyncService {
   constructor(
     private readonly db: PrismaClient,
-    private readonly leetCodeService: LeetCodeService
+    private readonly leetCodeService: LeetCodeService,
   ) {}
 
   async refreshUserStatsForAllLinkedUsers(): Promise<void> {
     const links = await this.db.userLink.findMany({
-      where: { verified: true }
+      where: { verified: true },
     });
 
     for (const link of links) {
@@ -34,16 +40,16 @@ export class StatsSyncService {
             streakCount: stats.streakCount ?? undefined,
             contestRating: stats.contestRating ?? undefined,
             lastSubmissionAt: stats.lastSubmissionAt ?? undefined,
-            fetchedAt: stats.fetchedAt
-          }
+            fetchedAt: stats.fetchedAt,
+          },
         });
       } catch (error) {
         logger.warn(
           {
             err: error instanceof Error ? error.message : error,
-            discordUserId: link.discordUserId
+            discordUserId: link.discordUserId,
           },
-          'Failed to refresh user stats'
+          'Failed to refresh user stats',
         );
       }
     }
@@ -60,7 +66,7 @@ export class StatsSyncService {
         slug: daily.slug,
         difficulty: daily.difficulty,
         url: daily.url,
-        fetchedAt: daily.fetchedAt
+        fetchedAt: daily.fetchedAt,
       },
       create: {
         date,
@@ -68,61 +74,84 @@ export class StatsSyncService {
         slug: daily.slug,
         difficulty: daily.difficulty,
         url: daily.url,
-        fetchedAt: daily.fetchedAt
-      }
+        fetchedAt: daily.fetchedAt,
+      },
     });
   }
 
-  async refreshDailyCompletionForAllUsers(): Promise<void> {
+  async refreshDailyCompletionForAllUsers(): Promise<NewDailyCompletion[]> {
+    const newlyCompleted: NewDailyCompletion[] = [];
     const today = toDateOnly(new Date());
     const daily = await this.db.dailyProblem.findUnique({
-      where: { date: today }
+      where: { date: today },
     });
 
     if (!daily) {
-      return;
+      return newlyCompleted;
     }
 
     const links = await this.db.userLink.findMany({
-      where: { verified: true }
+      where: { verified: true },
     });
 
     for (const link of links) {
       try {
         const completed = await this.leetCodeService.checkDailyCompletion(
           link.leetcodeUsername,
-          daily.slug
+          daily.slug,
         );
+
+        // Check if this is a new completion (not previously recorded as completed)
+        const existing = await this.db.dailyCompletion.findUnique({
+          where: {
+            userLinkId_dailyProblemId: {
+              userLinkId: link.id,
+              dailyProblemId: daily.id,
+            },
+          },
+        });
+
+        const isNewCompletion = completed && (!existing || !existing.completed);
 
         await this.db.dailyCompletion.upsert({
           where: {
             userLinkId_dailyProblemId: {
               userLinkId: link.id,
-              dailyProblemId: daily.id
-            }
+              dailyProblemId: daily.id,
+            },
           },
           update: {
             completed,
-            detectedAt: new Date()
+            detectedAt: new Date(),
           },
           create: {
             userLinkId: link.id,
             dailyProblemId: daily.id,
             completed,
             detectedAt: new Date(),
-            source: 'worker'
-          }
+            source: 'worker',
+          },
         });
+
+        if (isNewCompletion) {
+          newlyCompleted.push({
+            userLinkId: link.id,
+            discordUserId: link.discordUserId,
+            leetcodeUsername: link.leetcodeUsername,
+          });
+        }
       } catch (error) {
         logger.warn(
           {
             err: error instanceof Error ? error.message : error,
-            discordUserId: link.discordUserId
+            discordUserId: link.discordUserId,
           },
-          'Failed to refresh daily completion'
+          'Failed to refresh daily completion',
         );
       }
     }
+
+    return newlyCompleted;
   }
 
   async computeWeeklyLeaderboardSnapshotForGuild(guildId: string): Promise<void> {
@@ -131,12 +160,12 @@ export class StatsSyncService {
       where: {
         guildId,
         userLink: {
-          verified: true
-        }
+          verified: true,
+        },
       },
       include: {
-        userLink: true
-      }
+        userLink: true,
+      },
     });
 
     const entries: WeeklyLeaderboardEntry[] = [];
@@ -148,15 +177,15 @@ export class StatsSyncService {
           where: {
             userLinkId: link.id,
             fetchedAt: {
-              lte: weekStart
-            }
+              lte: weekStart,
+            },
           },
-          orderBy: { fetchedAt: 'desc' }
+          orderBy: { fetchedAt: 'desc' },
         }),
         this.db.userStatsSnapshot.findFirst({
           where: { userLinkId: link.id },
-          orderBy: { fetchedAt: 'desc' }
-        })
+          orderBy: { fetchedAt: 'desc' },
+        }),
       ]);
 
       if (!latestSnapshot) {
@@ -171,7 +200,7 @@ export class StatsSyncService {
         leetcodeUsername: link.leetcodeUsername,
         solvedDelta,
         baselineTotalSolved,
-        latestTotalSolved: latestSnapshot.totalSolved
+        latestTotalSolved: latestSnapshot.totalSolved,
       });
     }
 
@@ -186,15 +215,15 @@ export class StatsSyncService {
       guildId,
       weekStart: weekStart.toISOString(),
       generatedAt: new Date().toISOString(),
-      entries
+      entries,
     };
 
     await this.db.weeklyLeaderboardSnapshot.create({
       data: {
         guildId,
         weekStart,
-        payloadJson: payload as unknown as Prisma.InputJsonValue
-      }
+        payloadJson: payload as unknown as Prisma.InputJsonValue,
+      },
     });
   }
 }
