@@ -103,6 +103,10 @@ export class DiscordBotService {
       this.logger.info({ tag: client.user.tag }, 'Bot ready');
     });
 
+    this.client.on('error', (error) => {
+      this.logger.error({ err: error.message }, 'Discord client error');
+    });
+
     this.client.on(Events.InteractionCreate, async (interaction) => {
       if (!interaction.isChatInputCommand()) {
         return;
@@ -142,16 +146,23 @@ export class DiscordBotService {
           { err: error instanceof Error ? error.message : error },
           'Command execution failed',
         );
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp({
-            content: 'Something went wrong while executing that command.',
-            ephemeral: true,
-          });
-        } else {
-          await interaction.reply({
-            content: 'Something went wrong while executing that command.',
-            ephemeral: true,
-          });
+        try {
+          if (interaction.replied || interaction.deferred) {
+            await interaction.followUp({
+              content: 'Something went wrong while executing that command.',
+              ephemeral: true,
+            });
+          } else {
+            await interaction.reply({
+              content: 'Something went wrong while executing that command.',
+              ephemeral: true,
+            });
+          }
+        } catch (replyError) {
+          this.logger.warn(
+            { err: replyError instanceof Error ? replyError.message : replyError },
+            'Failed to send error response to interaction',
+          );
         }
       }
     });
