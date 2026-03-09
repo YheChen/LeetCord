@@ -1,0 +1,23 @@
+{
+  "name": "@leetcord/core",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json}\"",
+    "test": "echo \"TODO: add core service tests\""
+  },
+  "dependencies": {
+    "@leetcord/database": "workspace:*",
+    "@leetcord/leetcode-client": "workspace:*",
+    "@leetcord/shared": "workspace:*",
+    "@prisma/client": "^5.22.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
+

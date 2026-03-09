@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model UserLink {
+  id                    String                 @id @default(cuid())
+  discordUserId         String                 @unique
+  leetcodeUsername      String
+  verified              Boolean                @default(false)
+  verificationCode      String?
+  verificationExpiresAt DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  statsSnapshots        UserStatsSnapshot[]
+  dailyCompletions      DailyCompletion[]
+  guildMemberships      GuildMemberLink[]
+}
+
+model GuildSettings {
+  id                 String   @id @default(cuid())
+  guildId            String   @unique
+  dailyChannelId     String?
+  timezone           String?  // IANA timezone, e.g. "America/Los_Angeles"
+  leaderboardEnabled Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model GuildMemberLink {
+  id        String   @id @default(cuid())
+  guildId   String
+  userLinkId String
+  createdAt DateTime @default(now())
+
+  userLink  UserLink @relation(fields: [userLinkId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userLinkId])
+  @@index([guildId])
+  @@index([userLinkId])
+}
+
+model UserStatsSnapshot {
+  id              String   @id @default(cuid())
+  userLinkId      String
+  totalSolved     Int
+  easySolved      Int
+  mediumSolved    Int
+  hardSolved      Int
+  streakCount     Int?
+  contestRating   Float?
+  lastSubmissionAt DateTime?
+  fetchedAt       DateTime
+
+  userLink        UserLink @relation(fields: [userLinkId], references: [id], onDelete: Cascade)
+}
+
+model DailyProblem {
+  id        String   @id @default(cuid())
+  date      DateTime @unique
+  title     String
+  slug      String   @unique
+  difficulty String
+  url       String
+  fetchedAt DateTime
+
+  completions     DailyCompletion[]
+  guildDailyPosts GuildDailyPost[]
+}
+
+model DailyCompletion {
+  id             String   @id @default(cuid())
+  userLinkId     String
+  dailyProblemId String
+  completed      Boolean
+  detectedAt     DateTime
+  source         String
+
+  userLink       UserLink     @relation(fields: [userLinkId], references: [id], onDelete: Cascade)
+  dailyProblem   DailyProblem @relation(fields: [dailyProblemId], references: [id], onDelete: Cascade)
+
+  @@unique([userLinkId, dailyProblemId])
+}
+
+model GuildDailyPost {
+  id             String   @id @default(cuid())
+  guildId        String
+  dailyProblemId String
+  messageId      String
+  postedAt       DateTime @default(now())
+
+  dailyProblem   DailyProblem @relation(fields: [dailyProblemId], references: [id], onDelete: Cascade)
+}
+
+model WeeklyLeaderboardSnapshot {
+  id        String   @id @default(cuid())
+  guildId   String
+  weekStart DateTime
+  payloadJson Json
+  createdAt DateTime @default(now())
+
+  @@index([guildId, weekStart])
+}

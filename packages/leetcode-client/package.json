@@ -1,0 +1,21 @@
+{
+  "name": "@leetcord/leetcode-client",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json}\"",
+    "test": "echo \"TODO: add leetcode-client tests\""
+  },
+  "dependencies": {
+    "@leetcord/shared": "workspace:*",
+    "node-fetch": "^3.3.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

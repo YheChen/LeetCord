@@ -1,0 +1,30 @@
+{
+  "name": "@leetcord/bot",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "ts-node src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json}\"",
+    "test": "echo \"TODO: add bot tests\""
+  },
+  "dependencies": {
+    "@discordjs/rest": "^2.3.0",
+    "@leetcord/core": "workspace:*",
+    "@leetcord/database": "workspace:*",
+    "@leetcord/leetcode-client": "workspace:*",
+    "@leetcord/shared": "workspace:*",
+    "discord-api-types": "^0.37.100",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}

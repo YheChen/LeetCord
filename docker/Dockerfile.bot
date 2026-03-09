@@ -1,0 +1,14 @@
+FROM node:20-alpine AS base
+
+WORKDIR /app
+
+COPY package.json pnpm-workspace.yaml tsconfig.base.json .eslintrc.cjs .prettierrc ./
+COPY packages ./packages
+COPY apps ./apps
+
+RUN corepack enable pnpm && pnpm install --recursive --silent
+
+RUN pnpm --filter @leetcord/bot build
+
+CMD ["pnpm", "--filter", "@leetcord/bot", "start"]
+

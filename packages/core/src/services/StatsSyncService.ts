@@ -1,0 +1,200 @@
+import { Prisma, PrismaClient } from '@prisma/client';
+import {
+  WeeklyLeaderboardEntry,
+  WeeklyLeaderboardSnapshotPayload,
+  createLogger,
+  startOfWeekUtc,
+  toDateOnly
+} from '@leetcord/shared';
+import { LeetCodeService } from './LeetCodeService';
+
+const logger = createLogger({ name: 'core-stats-sync-service' });
+
+export class StatsSyncService {
+  constructor(
+    private readonly db: PrismaClient,
+    private readonly leetCodeService: LeetCodeService
+  ) {}
+
+  async refreshUserStatsForAllLinkedUsers(): Promise<void> {
+    const links = await this.db.userLink.findMany({
+      where: { verified: true }
+    });
+
+    for (const link of links) {
+      try {
+        const stats = await this.leetCodeService.getRecentStats(link.leetcodeUsername);
+        await this.db.userStatsSnapshot.create({
+          data: {
+            userLinkId: link.id,
+            totalSolved: stats.totalSolved,
+            easySolved: stats.easySolved,
+            mediumSolved: stats.mediumSolved,
+            hardSolved: stats.hardSolved,
+            streakCount: stats.streakCount ?? undefined,
+            contestRating: stats.contestRating ?? undefined,
+            lastSubmissionAt: stats.lastSubmissionAt ?? undefined,
+            fetchedAt: stats.fetchedAt
+          }
+        });
+      } catch (error) {
+        logger.warn(
+          {
+            err: error instanceof Error ? error.message : error,
+            discordUserId: link.discordUserId
+          },
+          'Failed to refresh user stats'
+        );
+      }
+    }
+  }
+
+  async refreshTodayDailyProblem(): Promise<void> {
+    const daily = await this.leetCodeService.getDailyProblem();
+    const date = toDateOnly(daily.date);
+
+    await this.db.dailyProblem.upsert({
+      where: { date },
+      update: {
+        title: daily.title,
+        slug: daily.slug,
+        difficulty: daily.difficulty,
+        url: daily.url,
+        fetchedAt: daily.fetchedAt
+      },
+      create: {
+        date,
+        title: daily.title,
+        slug: daily.slug,
+        difficulty: daily.difficulty,
+        url: daily.url,
+        fetchedAt: daily.fetchedAt
+      }
+    });
+  }
+
+  async refreshDailyCompletionForAllUsers(): Promise<void> {
+    const today = toDateOnly(new Date());
+    const daily = await this.db.dailyProblem.findUnique({
+      where: { date: today }
+    });
+
+    if (!daily) {
+      return;
+    }
+
+    const links = await this.db.userLink.findMany({
+      where: { verified: true }
+    });
+
+    for (const link of links) {
+      try {
+        const completed = await this.leetCodeService.checkDailyCompletion(
+          link.leetcodeUsername,
+          daily.slug
+        );
+
+        await this.db.dailyCompletion.upsert({
+          where: {
+            userLinkId_dailyProblemId: {
+              userLinkId: link.id,
+              dailyProblemId: daily.id
+            }
+          },
+          update: {
+            completed,
+            detectedAt: new Date()
+          },
+          create: {
+            userLinkId: link.id,
+            dailyProblemId: daily.id,
+            completed,
+            detectedAt: new Date(),
+            source: 'worker'
+          }
+        });
+      } catch (error) {
+        logger.warn(
+          {
+            err: error instanceof Error ? error.message : error,
+            discordUserId: link.discordUserId
+          },
+          'Failed to refresh daily completion'
+        );
+      }
+    }
+  }
+
+  async computeWeeklyLeaderboardSnapshotForGuild(guildId: string): Promise<void> {
+    const weekStart = startOfWeekUtc(new Date());
+    const guildMemberLinks = await this.db.guildMemberLink.findMany({
+      where: {
+        guildId,
+        userLink: {
+          verified: true
+        }
+      },
+      include: {
+        userLink: true
+      }
+    });
+
+    const entries: WeeklyLeaderboardEntry[] = [];
+
+    for (const memberLink of guildMemberLinks) {
+      const link = memberLink.userLink;
+      const [baselineSnapshot, latestSnapshot] = await Promise.all([
+        this.db.userStatsSnapshot.findFirst({
+          where: {
+            userLinkId: link.id,
+            fetchedAt: {
+              lte: weekStart
+            }
+          },
+          orderBy: { fetchedAt: 'desc' }
+        }),
+        this.db.userStatsSnapshot.findFirst({
+          where: { userLinkId: link.id },
+          orderBy: { fetchedAt: 'desc' }
+        })
+      ]);
+
+      if (!latestSnapshot) {
+        continue;
+      }
+
+      const baselineTotalSolved = baselineSnapshot?.totalSolved ?? 0;
+      const solvedDelta = Math.max(0, latestSnapshot.totalSolved - baselineTotalSolved);
+
+      entries.push({
+        discordUserId: link.discordUserId,
+        leetcodeUsername: link.leetcodeUsername,
+        solvedDelta,
+        baselineTotalSolved,
+        latestTotalSolved: latestSnapshot.totalSolved
+      });
+    }
+
+    entries.sort((a, b) => {
+      if (b.solvedDelta !== a.solvedDelta) {
+        return b.solvedDelta - a.solvedDelta;
+      }
+      return b.latestTotalSolved - a.latestTotalSolved;
+    });
+
+    const payload: WeeklyLeaderboardSnapshotPayload = {
+      guildId,
+      weekStart: weekStart.toISOString(),
+      generatedAt: new Date().toISOString(),
+      entries
+    };
+
+    await this.db.weeklyLeaderboardSnapshot.create({
+      data: {
+        guildId,
+        weekStart,
+        payloadJson: payload as unknown as Prisma.InputJsonValue
+      }
+    });
+  }
+}
