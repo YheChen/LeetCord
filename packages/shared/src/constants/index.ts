@@ -10,6 +10,7 @@ export const DISCORD_COMMANDS = {
   SETUP_TIMEZONE: 'setup-timezone',
   SETUP_LEADERBOARD: 'setup-leaderboard',
   STREAK: 'streak',
+  HELP: 'help',
 } as const;
 
 export const DAILY_POST_CRON_UTC = '5 0 * * *';

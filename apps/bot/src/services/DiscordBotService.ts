@@ -235,6 +235,10 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
       option.setName('user').setDescription('User to inspect (defaults to yourself)'),
     );
 
+  const help = new SlashCommandBuilder()
+    .setName(DISCORD_COMMANDS.HELP)
+    .setDescription('Show how to get started and a list of all commands');
+
   const setupLeaderboard = new SlashCommandBuilder()
     .setName(DISCORD_COMMANDS.SETUP_LEADERBOARD)
     .setDescription('Enable or disable leaderboard commands')
@@ -703,6 +707,35 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
           embeds: [embed],
           ephemeral: targetUser.id === interaction.user.id,
         });
+      },
+    },
+    {
+      data: help,
+      execute: async (interaction) => {
+        const embed = new EmbedBuilder()
+          .setTitle('LeetCord Help')
+          .setDescription(
+            [
+              '**Getting Started**',
+              `1. Run \`/${DISCORD_COMMANDS.LINK} username:<your_leetcode_username>\``,
+              '2. Copy the verification code and paste it into your [LeetCode profile bio](https://leetcode.com/profile/)',
+              '3. Save your bio, then run \`/verify\` to complete the link',
+              '',
+              '**Commands**',
+              `\`/${DISCORD_COMMANDS.ME}\` — View your LeetCode stats (or mention a user to see theirs)`,
+              `\`/${DISCORD_COMMANDS.DAILY}\` — See today's daily problem and your completion status`,
+              `\`/${DISCORD_COMMANDS.STREAK}\` — View your current and longest daily completion streak`,
+              `\`/${DISCORD_COMMANDS.LEADERBOARD}\` — Show server leaderboard (total, weekly, or daily)`,
+              `\`/${DISCORD_COMMANDS.UNLINK}\` — Unlink your LeetCode account`,
+              '',
+              '**Admin Commands**',
+              `\`/${DISCORD_COMMANDS.SETUP_DAILY_CHANNEL}\` — Set the channel for daily problem posts`,
+              `\`/${DISCORD_COMMANDS.SETUP_TIMEZONE}\` — Set the server timezone`,
+              `\`/${DISCORD_COMMANDS.SETUP_LEADERBOARD}\` — Enable or disable leaderboards`,
+            ].join('\n'),
+          );
+
+        await interaction.reply({ embeds: [embed], ephemeral: true });
       },
     },
     {
