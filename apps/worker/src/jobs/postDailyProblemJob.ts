@@ -9,12 +9,12 @@ type WorkerDatabaseClient = ReturnType<typeof getPrismaClient>;
 
 export const runPostDailyProblemJob = async (
   db: WorkerDatabaseClient,
-  rest: REST
+  rest: REST,
 ): Promise<void> => {
   try {
     const today = toDateOnly(new Date());
     const dailyProblem = await db.dailyProblem.findUnique({
-      where: { date: today }
+      where: { date: today },
     });
 
     if (!dailyProblem) {
@@ -25,13 +25,13 @@ export const runPostDailyProblemJob = async (
     const guildSettings = await db.guildSettings.findMany({
       where: {
         dailyChannelId: {
-          not: null
-        }
+          not: null,
+        },
       },
       select: {
         guildId: true,
-        dailyChannelId: true
-      }
+        dailyChannelId: true,
+      },
     });
 
     for (const setting of guildSettings) {
@@ -43,9 +43,9 @@ export const runPostDailyProblemJob = async (
       const existingPost = await db.guildDailyPost.findFirst({
         where: {
           guildId: setting.guildId,
-          dailyProblemId: dailyProblem.id
+          dailyProblemId: dailyProblem.id,
         },
-        orderBy: { postedAt: 'desc' }
+        orderBy: { postedAt: 'desc' },
       });
 
       if (existingPost) {
@@ -57,16 +57,19 @@ export const runPostDailyProblemJob = async (
           title: dailyProblem.title,
           url: dailyProblem.url,
           difficulty: dailyProblem.difficulty,
-          date: dailyProblem.date
+          date: dailyProblem.date,
         });
 
         const response = await rest.post(Routes.channelMessages(channelId), {
-          body: payload
+          body: payload,
         });
         const messageId = getMessageId(response);
 
         if (!messageId) {
-          logger.warn({ guildId: setting.guildId, channelId }, 'Daily post sent but no message id found');
+          logger.warn(
+            { guildId: setting.guildId, channelId },
+            'Daily post sent but no message id found',
+          );
           continue;
         }
 
@@ -74,26 +77,38 @@ export const runPostDailyProblemJob = async (
           data: {
             guildId: setting.guildId,
             dailyProblemId: dailyProblem.id,
-            messageId
-          }
+            messageId,
+          },
         });
       } catch (error) {
         logger.warn(
           {
             err: error instanceof Error ? error.message : error,
             guildId: setting.guildId,
-            channelId
+            channelId,
           },
-          'Failed to post daily problem to guild channel'
+          'Failed to post daily problem to guild channel',
         );
       }
     }
   } catch (error) {
     logger.error(
       { err: error instanceof Error ? error.message : error },
-      'Failed daily posting job'
+      'Failed daily posting job',
     );
   }
+};
+
+const DIFFICULTY_COLORS: Record<string, number> = {
+  Easy: 0x00b8a3,
+  Medium: 0xffc01e,
+  Hard: 0xff375f,
+};
+
+const DIFFICULTY_EMOJIS: Record<string, string> = {
+  Easy: '🟢',
+  Medium: '🟡',
+  Hard: '🔴',
 };
 
 const buildDailyMessagePayload = (problem: {
@@ -102,26 +117,19 @@ const buildDailyMessagePayload = (problem: {
   difficulty: string;
   date: Date;
 }): RESTPostAPIChannelMessageJSONBody => {
+  const emoji = DIFFICULTY_EMOJIS[problem.difficulty] ?? '🟡';
   return {
-    content: `LeetCode daily challenge for ${problem.date.toISOString().slice(0, 10)}`,
     embeds: [
       {
-        title: problem.title,
+        title: `📋 ${problem.title}`,
         url: problem.url,
-        fields: [
-          {
-            name: 'Difficulty',
-            value: problem.difficulty,
-            inline: true
-          },
-          {
-            name: 'Date',
-            value: problem.date.toISOString().slice(0, 10),
-            inline: true
-          }
-        ]
-      }
-    ]
+        color: DIFFICULTY_COLORS[problem.difficulty] ?? 0xffc01e,
+        description: `${emoji} **${problem.difficulty}** · ${problem.date.toISOString().slice(0, 10)}`,
+        footer: {
+          text: 'LeetCode Daily Challenge',
+        },
+      },
+    ],
   };
 };
 

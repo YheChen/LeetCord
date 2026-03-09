@@ -7,16 +7,13 @@ const logger = createLogger({ name: 'job-post-daily-recap' });
 
 type WorkerDatabaseClient = ReturnType<typeof getPrismaClient>;
 
-export const runPostDailyRecapJob = async (
-  db: WorkerDatabaseClient,
-  rest: REST
-): Promise<void> => {
+export const runPostDailyRecapJob = async (db: WorkerDatabaseClient, rest: REST): Promise<void> => {
   try {
     const yesterday = toDateOnly(new Date());
     yesterday.setUTCDate(yesterday.getUTCDate() - 1);
 
     const yesterdayProblem = await db.dailyProblem.findUnique({
-      where: { date: yesterday }
+      where: { date: yesterday },
     });
 
     if (!yesterdayProblem) {
@@ -26,7 +23,7 @@ export const runPostDailyRecapJob = async (
 
     const guildSettings = await db.guildSettings.findMany({
       where: { dailyChannelId: { not: null } },
-      select: { guildId: true, dailyChannelId: true }
+      select: { guildId: true, dailyChannelId: true },
     });
 
     for (const setting of guildSettings) {
@@ -40,11 +37,11 @@ export const runPostDailyRecapJob = async (
             completed: true,
             userLink: {
               verified: true,
-              guildMemberships: { some: { guildId: setting.guildId } }
-            }
+              guildMemberships: { some: { guildId: setting.guildId } },
+            },
           },
           orderBy: { detectedAt: 'asc' },
-          include: { userLink: true }
+          include: { userLink: true },
         });
 
         const streak = await computeGuildStreak(db, setting.guildId, yesterday);
@@ -54,9 +51,9 @@ export const runPostDailyRecapJob = async (
           yesterdayProblem.url,
           completions.map((c) => ({
             discordUserId: c.userLink.discordUserId,
-            leetcodeUsername: c.userLink.leetcodeUsername
+            leetcodeUsername: c.userLink.leetcodeUsername,
           })),
-          streak
+          streak,
         );
 
         await rest.post(Routes.channelMessages(channelId), { body: payload });
@@ -65,19 +62,16 @@ export const runPostDailyRecapJob = async (
           {
             err: error instanceof Error ? error.message : error,
             guildId: setting.guildId,
-            channelId
+            channelId,
           },
-          'Failed to post daily recap to guild channel'
+          'Failed to post daily recap to guild channel',
         );
       }
     }
 
     logger.info({ guildCount: guildSettings.length }, 'Posted daily recaps');
   } catch (error) {
-    logger.error(
-      { err: error instanceof Error ? error.message : error },
-      'Failed daily recap job'
-    );
+    logger.error({ err: error instanceof Error ? error.message : error }, 'Failed daily recap job');
   }
 };
 
@@ -88,7 +82,7 @@ export const runPostDailyRecapJob = async (
 const computeGuildStreak = async (
   db: WorkerDatabaseClient,
   guildId: string,
-  endDate: Date
+  endDate: Date,
 ): Promise<number> => {
   let streak = 0;
   const checkDate = new Date(endDate);
@@ -99,7 +93,7 @@ const computeGuildStreak = async (
 
     const daily = await db.dailyProblem.findUnique({
       where: { date: dateOnly },
-      select: { id: true }
+      select: { id: true },
     });
 
     if (!daily) break;
@@ -110,9 +104,9 @@ const computeGuildStreak = async (
         completed: true,
         userLink: {
           verified: true,
-          guildMemberships: { some: { guildId } }
-        }
-      }
+          guildMemberships: { some: { guildId } },
+        },
+      },
     });
 
     if (completionCount === 0) break;
@@ -128,31 +122,31 @@ const buildRecapPayload = (
   problemTitle: string,
   problemUrl: string,
   completedUsers: Array<{ discordUserId: string; leetcodeUsername: string }>,
-  streak: number
+  streak: number,
 ): RESTPostAPIChannelMessageJSONBody => {
-  const streakEmoji = streak >= 7 ? '🔥' : streak >= 3 ? '👏' : '📊';
-  const header = `**Your group is on a ${streak} day streak!** ${streakEmoji}`;
+  const streakEmoji = streak >= 30 ? '👑' : streak >= 7 ? '🔥' : streak >= 3 ? '👏' : '📊';
 
   let resultLines: string;
   if (completedUsers.length === 0) {
-    resultLines = 'No one completed the daily challenge yesterday.';
+    resultLines = '*No one completed the daily challenge yesterday.*';
   } else {
-    resultLines = completedUsers
-      .map((u) => `✅ <@${u.discordUserId}> (${u.leetcodeUsername})`)
-      .join('\n');
+    resultLines = completedUsers.map((u) => `✅ <@${u.discordUserId}>`).join('\n');
   }
 
   return {
-    content: header,
     embeds: [
       {
-        title: `Yesterday's Daily: ${problemTitle}`,
-        url: problemUrl,
-        description: `**Results:**\n${resultLines}`,
+        title: `${streakEmoji} ${streak} Day Streak!`,
+        color: streak >= 7 ? 0xff6b35 : streak >= 3 ? 0xffa116 : 0x5865f2,
+        description: [
+          `**Yesterday's Daily:** [${problemTitle}](${problemUrl})`,
+          '',
+          resultLines,
+        ].join('\n'),
         footer: {
-          text: `${completedUsers.length} member${completedUsers.length !== 1 ? 's' : ''} completed the daily`
-        }
-      }
-    ]
+          text: `${completedUsers.length} member${completedUsers.length !== 1 ? 's' : ''} completed the daily`,
+        },
+      },
+    ],
   };
 };

@@ -496,15 +496,19 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
             return;
           }
 
-          const embed = new EmbedBuilder().setTitle('Total Solved Leaderboard').setDescription(
-            entries
-              .slice(0, 15)
-              .map(
-                (entry, index) =>
-                  `${index + 1}. <@${entry.discordUserId}> (\`${entry.leetcodeUsername}\`) - **${entry.totalSolved}** solved`,
-              )
-              .join('\n'),
-          );
+          const medals = ['🥇', '🥈', '🥉'];
+          const embed = new EmbedBuilder()
+            .setTitle('🏆 Total Solved Leaderboard')
+            .setColor(0xffa116)
+            .setDescription(
+              entries
+                .slice(0, 15)
+                .map(
+                  (entry, index) =>
+                    `${medals[index] ?? `**${index + 1}.**`} <@${entry.discordUserId}> · **${entry.totalSolved}** solved (🟢${entry.easySolved} 🟡${entry.mediumSolved} 🔴${entry.hardSolved})`,
+                )
+                .join('\n'),
+            );
           await interaction.reply({ embeds: [embed] });
           return;
         }
@@ -518,17 +522,22 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
             return;
           }
 
+          const medals = ['🥇', '🥈', '🥉'];
           const embed = new EmbedBuilder()
-            .setTitle("Today's Daily Completion Leaderboard")
+            .setTitle('✅ Daily Completion Leaderboard')
+            .setColor(0x00b8a3)
             .setDescription(
               entries
                 .slice(0, 25)
                 .map(
                   (entry, index) =>
-                    `${index + 1}. <@${entry.discordUserId}> (\`${entry.leetcodeUsername}\`)`,
+                    `${medals[index] ?? `**${index + 1}.**`} <@${entry.discordUserId}> (\`${entry.leetcodeUsername}\`)`,
                 )
                 .join('\n'),
-            );
+            )
+            .setFooter({
+              text: `${entries.length} member${entries.length !== 1 ? 's' : ''} completed today`,
+            });
           await interaction.reply({ embeds: [embed] });
           return;
         }
@@ -686,21 +695,28 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
         const totalCompleted = uniqueDates.length;
 
         const streakEmoji = currentStreak >= 7 ? '🔥' : currentStreak >= 3 ? '👏' : '📊';
+        const streakColor =
+          currentStreak >= 7 ? 0xff6b35 : currentStreak >= 3 ? 0xffa116 : 0x5865f2;
 
         const embed = new EmbedBuilder()
-          .setTitle(`Daily Streak for ${userLink.leetcodeUsername}`)
+          .setTitle(`📅 Daily Streak · ${userLink.leetcodeUsername}`)
+          .setColor(streakColor)
           .addFields(
             {
-              name: 'Current Streak',
-              value: `${currentStreak} day${currentStreak !== 1 ? 's' : ''} ${streakEmoji}`,
+              name: `${streakEmoji} Current Streak`,
+              value: `**${currentStreak}** day${currentStreak !== 1 ? 's' : ''}`,
               inline: true,
             },
             {
-              name: 'Longest Streak',
-              value: `${longestStreak} day${longestStreak !== 1 ? 's' : ''}`,
+              name: '🏅 Longest Streak',
+              value: `**${longestStreak}** day${longestStreak !== 1 ? 's' : ''}`,
               inline: true,
             },
-            { name: 'Total Dailies Completed', value: `${totalCompleted}`, inline: true },
+            {
+              name: '✅ Total Completed',
+              value: `**${totalCompleted}**`,
+              inline: true,
+            },
           );
 
         await interaction.reply({
@@ -713,26 +729,41 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
       data: help,
       execute: async (interaction) => {
         const embed = new EmbedBuilder()
-          .setTitle('LeetCord Help')
-          .setDescription(
-            [
-              '**Getting Started**',
-              `1. Run \`/${DISCORD_COMMANDS.LINK} username:<your_leetcode_username>\``,
-              '2. Copy the verification code and paste it into your [LeetCode profile bio](https://leetcode.com/profile/)',
-              '3. Save your bio, then run \`/verify\` to complete the link',
-              '',
-              '**Commands**',
-              `\`/${DISCORD_COMMANDS.ME}\` — View your LeetCode stats (or mention a user to see theirs)`,
-              `\`/${DISCORD_COMMANDS.DAILY}\` — See today's daily problem and your completion status`,
-              `\`/${DISCORD_COMMANDS.STREAK}\` — View your current and longest daily completion streak`,
-              `\`/${DISCORD_COMMANDS.LEADERBOARD}\` — Show server leaderboard (total, weekly, or daily)`,
-              `\`/${DISCORD_COMMANDS.UNLINK}\` — Unlink your LeetCode account`,
-              '',
-              '**Admin Commands**',
-              `\`/${DISCORD_COMMANDS.SETUP_DAILY_CHANNEL}\` — Set the channel for daily problem posts`,
-              `\`/${DISCORD_COMMANDS.SETUP_TIMEZONE}\` — Set the server timezone`,
-              `\`/${DISCORD_COMMANDS.SETUP_LEADERBOARD}\` — Enable or disable leaderboards`,
-            ].join('\n'),
+          .setTitle('📚 LeetCord Help')
+          .setColor(0xffa116)
+          .addFields(
+            {
+              name: '🚀 Getting Started',
+              value: [
+                `1\. Run \`/${DISCORD_COMMANDS.LINK} username:<your_username>\``,
+                '2\. Paste the code into your [LeetCode bio](https://leetcode.com/profile/)',
+                `3\. Run \`/${DISCORD_COMMANDS.VERIFY}\` to finish linking`,
+              ].join('\n'),
+            },
+            {
+              name: '\u200b',
+              value: '\u200b',
+            },
+            {
+              name: '📊 Commands',
+              value: [
+                `\`/${DISCORD_COMMANDS.ME}\` — Your LeetCode stats`,
+                `\`/${DISCORD_COMMANDS.DAILY}\` — Today's daily problem`,
+                `\`/${DISCORD_COMMANDS.STREAK}\` — Your completion streak`,
+                `\`/${DISCORD_COMMANDS.LEADERBOARD}\` — Server leaderboard`,
+                `\`/${DISCORD_COMMANDS.UNLINK}\` — Unlink your account`,
+              ].join('\n'),
+              inline: true,
+            },
+            {
+              name: '⚙️ Admin',
+              value: [
+                `\`/${DISCORD_COMMANDS.SETUP_DAILY_CHANNEL}\``,
+                `\`/${DISCORD_COMMANDS.SETUP_TIMEZONE}\``,
+                `\`/${DISCORD_COMMANDS.SETUP_LEADERBOARD}\``,
+              ].join('\n'),
+              inline: true,
+            },
           );
 
         await interaction.reply({ embeds: [embed], ephemeral: true });
@@ -766,12 +797,13 @@ const buildWeeklyLeaderboardEmbed = (snapshot: WeeklyLeaderboardSnapshotPayload)
   const weekStart = snapshot.weekStart.slice(0, 10);
   const entries = snapshot.entries.slice(0, 15);
 
+  const medals = ['🥇', '🥈', '🥉'];
   const description =
     entries.length > 0
       ? entries
           .map(
             (entry, index) =>
-              `${index + 1}. <@${entry.discordUserId}> (\`${entry.leetcodeUsername}\`) - **+${
+              `${medals[index] ?? `**${index + 1}.**`} <@${entry.discordUserId}> · **+${
                 entry.solvedDelta
               }** this week`,
           )
@@ -779,9 +811,10 @@ const buildWeeklyLeaderboardEmbed = (snapshot: WeeklyLeaderboardSnapshotPayload)
       : 'No progress captured yet this week.';
 
   return new EmbedBuilder()
-    .setTitle('Weekly Leaderboard')
+    .setTitle('📈 Weekly Leaderboard')
+    .setColor(0x5865f2)
     .setDescription(description)
-    .setFooter({ text: `Week start (UTC): ${weekStart}` });
+    .setFooter({ text: `Week of ${weekStart}` });
 };
 
 const isValidIanaTimezone = (timezone: string): boolean => {

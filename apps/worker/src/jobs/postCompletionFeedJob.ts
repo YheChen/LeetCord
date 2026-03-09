@@ -48,7 +48,12 @@ export const runPostCompletionFeedJob = async (
       for (const completion of guildCompletions) {
         try {
           const payload: RESTPostAPIChannelMessageJSONBody = {
-            content: `✅ <@${completion.discordUserId}> just completed today's daily! (\`${completion.leetcodeUsername}\`)`,
+            embeds: [
+              {
+                color: 0x00b8a3,
+                description: `✅ <@${completion.discordUserId}> just completed today's daily!`,
+              },
+            ],
           };
 
           await rest.post(Routes.channelMessages(channelId), { body: payload });

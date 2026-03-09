@@ -1,35 +1,50 @@
 import { EmbedBuilder } from 'discord.js';
 import { LeetCodeProfileStats } from '@leetcord/shared';
 
+const LEETCODE_COLOR = 0xffa116;
+
 export const buildUserStatsEmbed = (stats: LeetCodeProfileStats): EmbedBuilder => {
+  const profileUrl = `https://leetcode.com/u/${encodeURIComponent(stats.username)}/`;
+
   const embed = new EmbedBuilder()
-    .setTitle(`LeetCode stats for ${stats.username}`)
-    .addFields(
-      { name: 'Total solved', value: stats.totalSolved.toString(), inline: true },
-      { name: 'Easy', value: stats.easySolved.toString(), inline: true },
-      { name: 'Medium', value: stats.mediumSolved.toString(), inline: true },
-      { name: 'Hard', value: stats.hardSolved.toString(), inline: true }
+    .setTitle(`📊 ${stats.username}`)
+    .setURL(profileUrl)
+    .setColor(LEETCODE_COLOR)
+    .setDescription(
+      [
+        `**${stats.totalSolved}** problems solved`,
+        '',
+        `🟢 Easy: **${stats.easySolved}**`,
+        `🟡 Medium: **${stats.mediumSolved}**`,
+        `🔴 Hard: **${stats.hardSolved}**`,
+      ].join('\n'),
     )
     .setFooter({
-      text: `Last sync: ${stats.fetchedAt.toISOString()}`
+      text: `Last synced ${stats.fetchedAt.toISOString().slice(0, 16).replace('T', ' ')} UTC`,
     });
 
+  const extraFields: Array<{ name: string; value: string; inline: boolean }> = [];
+
   if (stats.streakCount !== null) {
-    embed.addFields({
-      name: 'Streak',
-      value: `${stats.streakCount} day(s)`,
-      inline: true
+    const emoji = stats.streakCount >= 7 ? '🔥' : stats.streakCount >= 3 ? '👏' : '📅';
+    extraFields.push({
+      name: `${emoji} Streak`,
+      value: `**${stats.streakCount}** day${stats.streakCount !== 1 ? 's' : ''}`,
+      inline: true,
     });
   }
 
   if (stats.contestRating !== null) {
-    embed.addFields({
-      name: 'Contest rating',
-      value: stats.contestRating.toFixed(2),
-      inline: true
+    extraFields.push({
+      name: '🏆 Contest Rating',
+      value: `**${stats.contestRating.toFixed(0)}**`,
+      inline: true,
     });
+  }
+
+  if (extraFields.length > 0) {
+    embed.addFields(extraFields);
   }
 
   return embed;
 };
-
