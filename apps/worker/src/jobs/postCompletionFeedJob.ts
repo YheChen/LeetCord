@@ -28,7 +28,9 @@ export const runPostCompletionFeedJob = async (
       if (!channelId) continue;
 
       // Find which newly-completed users are members of this guild
-      const guildCompletions: NewDailyCompletion[] = [];
+      const guildCompletions: Array<
+        NewDailyCompletion & { completionFeedMentionsEnabled: boolean }
+      > = [];
 
       for (const completion of newCompletions) {
         const membership = await db.guildMemberLink.findFirst({
@@ -36,10 +38,20 @@ export const runPostCompletionFeedJob = async (
             guildId: setting.guildId,
             userLinkId: completion.userLinkId,
           },
+          select: {
+            userLink: {
+              select: {
+                completionFeedMentionsEnabled: true,
+              },
+            },
+          },
         });
 
         if (membership) {
-          guildCompletions.push(completion);
+          guildCompletions.push({
+            ...completion,
+            completionFeedMentionsEnabled: membership.userLink.completionFeedMentionsEnabled,
+          });
         }
       }
 
@@ -51,7 +63,9 @@ export const runPostCompletionFeedJob = async (
             embeds: [
               {
                 color: 0x00b8a3,
-                description: `✅ <@${completion.discordUserId}> just completed today's daily!`,
+                description: completion.completionFeedMentionsEnabled
+                  ? `✅ <@${completion.discordUserId}> just completed today's daily!`
+                  : `✅ ${completion.leetcodeUsername} just completed today's daily!`,
               },
             ],
           };

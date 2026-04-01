@@ -52,6 +52,7 @@ export const runPostDailyRecapJob = async (db: WorkerDatabaseClient, rest: REST)
           completions.map((c) => ({
             discordUserId: c.userLink.discordUserId,
             leetcodeUsername: c.userLink.leetcodeUsername,
+            completionFeedMentionsEnabled: c.userLink.completionFeedMentionsEnabled,
           })),
           streak,
         );
@@ -121,7 +122,11 @@ const computeGuildStreak = async (
 const buildRecapPayload = (
   problemTitle: string,
   problemUrl: string,
-  completedUsers: Array<{ discordUserId: string; leetcodeUsername: string }>,
+  completedUsers: Array<{
+    discordUserId: string;
+    leetcodeUsername: string;
+    completionFeedMentionsEnabled: boolean;
+  }>,
   streak: number,
 ): RESTPostAPIChannelMessageJSONBody => {
   const streakEmoji = streak >= 30 ? '👑' : streak >= 7 ? '🔥' : streak >= 3 ? '👏' : '📊';
@@ -130,7 +135,11 @@ const buildRecapPayload = (
   if (completedUsers.length === 0) {
     resultLines = '*No one completed the daily challenge yesterday.*';
   } else {
-    resultLines = completedUsers.map((u) => `✅ <@${u.discordUserId}>`).join('\n');
+    resultLines = completedUsers
+      .map((u) =>
+        u.completionFeedMentionsEnabled ? `✅ <@${u.discordUserId}>` : `✅ ${u.leetcodeUsername}`,
+      )
+      .join('\n');
   }
 
   return {

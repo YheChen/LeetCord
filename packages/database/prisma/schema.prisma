@@ -12,6 +12,7 @@ model UserLink {
   discordUserId         String                 @unique
   leetcodeUsername      String
   verified              Boolean                @default(false)
+  completionFeedMentionsEnabled Boolean        @default(true)
   verificationCode      String?
   verificationExpiresAt DateTime?
   createdAt             DateTime               @default(now())

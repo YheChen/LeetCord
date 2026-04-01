@@ -16,6 +16,10 @@ import {
 } from '@leetcord/shared';
 import { Routes } from 'discord-api-types/v10';
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonInteraction,
+  ButtonStyle,
   ChannelType,
   ChatInputCommandInteraction,
   Client,
@@ -45,6 +49,11 @@ export interface SlashCommand {
   execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
 }
 
+export interface ButtonHandler {
+  customIdPrefix: string;
+  execute: (interaction: ButtonInteraction) => Promise<void>;
+}
+
 /** Per-user command cooldowns (in seconds). Unlisted commands have no cooldown. */
 const COMMAND_COOLDOWNS: Partial<Record<string, number>> = {
   [DISCORD_COMMANDS.ME]: 10,
@@ -55,22 +64,38 @@ const COMMAND_COOLDOWNS: Partial<Record<string, number>> = {
   [DISCORD_COMMANDS.VERIFY]: 15,
 };
 
+const TOGGLE_COMPLETION_FEED_MENTIONS_PREFIX = 'toggle-completion-feed-mentions';
+
+const buildCompletionFeedMentionsToggleRow = (
+  discordUserId: string,
+  enabled: boolean,
+): ActionRowBuilder<ButtonBuilder> =>
+  new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`${TOGGLE_COMPLETION_FEED_MENTIONS_PREFIX}:${discordUserId}`)
+      .setLabel(enabled ? 'Disable completion pings' : 'Enable completion pings')
+      .setStyle(enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
+  );
+
 export class DiscordBotService {
   private readonly client: Client;
   private readonly rest: REST;
   private readonly logger = createLogger({ name: 'bot' });
   private readonly commands = new Collection<string, SlashCommand>();
+  private readonly buttonHandlers: ButtonHandler[];
   /** Map<"userId:commandName", expiry timestamp (ms)> */
   private readonly cooldowns = new Map<string, number>();
 
   constructor(
     private readonly env: BotEnv,
     commands: SlashCommand[],
+    buttonHandlers: ButtonHandler[] = [],
   ) {
     this.client = new Client({
       intents: [GatewayIntentBits.Guilds],
     });
     this.rest = new REST({ version: '10' }).setToken(env.DISCORD_TOKEN);
+    this.buttonHandlers = buttonHandlers;
 
     commands.forEach((command) => {
       this.commands.set(command.data.name, command);
@@ -108,6 +133,44 @@ export class DiscordBotService {
     });
 
     this.client.on(Events.InteractionCreate, async (interaction) => {
+      if (interaction.isButton()) {
+        const handler = this.buttonHandlers.find((entry) =>
+          interaction.customId.startsWith(entry.customIdPrefix),
+        );
+
+        if (!handler) {
+          return;
+        }
+
+        try {
+          await handler.execute(interaction);
+        } catch (error) {
+          this.logger.error(
+            { err: error instanceof Error ? error.message : error, customId: interaction.customId },
+            'Button interaction failed',
+          );
+          try {
+            if (interaction.replied || interaction.deferred) {
+              await interaction.followUp({
+                content: 'Something went wrong while updating that setting.',
+                ephemeral: true,
+              });
+            } else {
+              await interaction.reply({
+                content: 'Something went wrong while updating that setting.',
+                ephemeral: true,
+              });
+            }
+          } catch (replyError) {
+            this.logger.warn(
+              { err: replyError instanceof Error ? replyError.message : replyError },
+              'Failed to send button interaction error response',
+            );
+          }
+        }
+        return;
+      }
+
       if (!interaction.isChatInputCommand()) {
         return;
       }
@@ -403,8 +466,23 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
 
         if (!latestSnapshot) {
           await interaction.reply({
-            content: 'No cached stats found yet. Try again after the worker refreshes stats.',
-            ephemeral: true,
+            content:
+              targetUser.id === interaction.user.id
+                ? [
+                    'No cached stats found yet. Try again after the worker refreshes stats.',
+                    'You can still use the button below to control automatic completion-feed pings.',
+                  ].join('\n')
+                : 'No cached stats found yet. Try again after the worker refreshes stats.',
+            components:
+              targetUser.id === interaction.user.id
+                ? [
+                    buildCompletionFeedMentionsToggleRow(
+                      interaction.user.id,
+                      userLink.completionFeedMentionsEnabled,
+                    ),
+                  ]
+                : undefined,
+            ephemeral: targetUser.id === interaction.user.id,
           });
           return;
         }
@@ -447,6 +525,15 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
 
         await interaction.reply({
           embeds: [embed],
+          components:
+            targetUser.id === interaction.user.id
+              ? [
+                  buildCompletionFeedMentionsToggleRow(
+                    interaction.user.id,
+                    userLink.completionFeedMentionsEnabled,
+                  ),
+                ]
+              : undefined,
           ephemeral: targetUser.id === interaction.user.id,
         });
       },
@@ -804,6 +891,11 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
               ].join('\n'),
               inline: true,
             },
+            {
+              name: '🔔 Mentions',
+              value:
+                `Run \`/${DISCORD_COMMANDS.ME}\` and use the button to control whether automatic completion posts ping you.`,
+            },
           );
 
         await interaction.reply({ embeds: [embed], ephemeral: true });
@@ -832,6 +924,60 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
 
   return commands;
 };
+
+export const createCoreButtonHandlers = (services: BotCommandServices): ButtonHandler[] => [
+  {
+    customIdPrefix: TOGGLE_COMPLETION_FEED_MENTIONS_PREFIX,
+    execute: async (interaction) => {
+      const targetDiscordUserId = interaction.customId.slice(
+        `${TOGGLE_COMPLETION_FEED_MENTIONS_PREFIX}:`.length,
+      );
+
+      if (targetDiscordUserId !== interaction.user.id) {
+        await interaction.reply({
+          content: 'This settings button only works for your own account.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const userLink = await services.db.userLink.findUnique({
+        where: { discordUserId: interaction.user.id },
+        select: {
+          completionFeedMentionsEnabled: true,
+          verified: true,
+        },
+      });
+
+      if (!userLink?.verified) {
+        await interaction.reply({
+          content: `Link your account with \`/${DISCORD_COMMANDS.LINK}\` before changing this setting.`,
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const nextEnabled = !userLink.completionFeedMentionsEnabled;
+      await services.db.userLink.update({
+        where: { discordUserId: interaction.user.id },
+        data: {
+          completionFeedMentionsEnabled: nextEnabled,
+        },
+      });
+
+      await interaction.update({
+        components: [buildCompletionFeedMentionsToggleRow(interaction.user.id, nextEnabled)],
+      });
+
+      await interaction.followUp({
+        content: nextEnabled
+          ? 'Automatic completion posts can ping you again.'
+          : 'Automatic completion posts will use your LeetCode username instead of pinging you.',
+        ephemeral: true,
+      });
+    },
+  },
+];
 
 const buildWeeklyLeaderboardEmbed = (snapshot: WeeklyLeaderboardSnapshotPayload): EmbedBuilder => {
   const weekStart = snapshot.weekStart.slice(0, 10);

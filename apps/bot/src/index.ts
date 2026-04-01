@@ -10,7 +10,11 @@ import {
 import { createLeetCodeClient } from '@leetcord/leetcode-client';
 import { createLogger } from '@leetcord/shared';
 import { loadBotEnv } from './config/env';
-import { createCoreSlashCommands, DiscordBotService } from './services/DiscordBotService';
+import {
+  createCoreButtonHandlers,
+  createCoreSlashCommands,
+  DiscordBotService,
+} from './services/DiscordBotService';
 
 const logger = createLogger({ name: 'bot-main' });
 
@@ -31,7 +35,14 @@ const main = async (): Promise<void> => {
     guildSettingsService,
     leaderboardService
   });
-  const bot = new DiscordBotService(env, commands);
+  const buttonHandlers = createCoreButtonHandlers({
+    db,
+    linkService,
+    guildMembershipService,
+    guildSettingsService,
+    leaderboardService
+  });
+  const bot = new DiscordBotService(env, commands, buttonHandlers);
 
   await bot.registerSlashCommands();
   await bot.start();
