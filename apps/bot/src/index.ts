@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import { config as loadDotenv } from 'dotenv';
+import { resolve } from 'path';
 import { getPrismaClient } from '@leetcord/database';
 import {
   GuildMembershipService,
@@ -15,6 +16,8 @@ import {
   createCoreSlashCommands,
   DiscordBotService,
 } from './services/DiscordBotService';
+
+loadDotenv({ path: resolve(__dirname, '../../../.env') });
 
 const logger = createLogger({ name: 'bot-main' });
 

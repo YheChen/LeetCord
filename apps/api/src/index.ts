@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import { config as loadDotenv } from 'dotenv';
+import { resolve } from 'path';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
@@ -10,6 +11,8 @@ import { loadApiEnv } from './config/env';
 import { registerErrorHandler } from './middleware/errorHandler';
 import { registerHealthRoutes } from './routes/health';
 import { registerVerificationRoutes } from './routes/verification';
+
+loadDotenv({ path: resolve(__dirname, '../../../.env') });
 
 const logger = createLogger({ name: 'api-main' });
 

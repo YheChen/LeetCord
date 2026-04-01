@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import { config as loadDotenv } from 'dotenv';
+import { resolve } from 'path';
 import { REST } from '@discordjs/rest';
 import { getPrismaClient } from '@leetcord/database';
 import { LeetCodeService, StatsSyncService } from '@leetcord/core';
@@ -13,6 +14,8 @@ import { runRefreshUserStatsJob } from './jobs/refreshUserStatsJob';
 import { registerDailyScheduler } from './schedulers/dailyScheduler';
 import { registerFrequentSchedulers } from './schedulers/frequentScheduler';
 import { registerWeeklyScheduler } from './schedulers/weeklyScheduler';
+
+loadDotenv({ path: resolve(__dirname, '../../../.env') });
 
 const logger = createLogger({ name: 'worker-main' });
 

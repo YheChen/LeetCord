@@ -110,14 +110,28 @@ export class DiscordBotService {
 
     if (guildIds.length === 0) {
       const route = Routes.applicationCommands(this.env.DISCORD_CLIENT_ID);
+      this.logger.info({ count: body.length, scope: 'global' }, 'Registering slash commands');
       await this.rest.put(route, { body });
       this.logger.info({ count: body.length, scope: 'global' }, 'Registered slash commands');
       return;
     }
 
     for (const guildId of guildIds) {
-      const route = Routes.applicationGuildCommands(this.env.DISCORD_CLIENT_ID, guildId);
-      await this.rest.put(route, { body });
+      try {
+        const route = Routes.applicationGuildCommands(this.env.DISCORD_CLIENT_ID, guildId);
+        this.logger.info({ count: body.length, guildId }, 'Registering slash commands for guild');
+        await this.rest.put(route, { body });
+        this.logger.info(
+          { count: body.length, guildId },
+          'Registered slash commands for guild',
+        );
+      } catch (error) {
+        this.logger.error(
+          { err: error instanceof Error ? error.message : error, guildId },
+          'Failed to register slash commands for guild',
+        );
+        throw error;
+      }
     }
 
     this.logger.info({ count: body.length, guildIds }, 'Registered slash commands');
