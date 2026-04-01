@@ -106,21 +106,46 @@ export class DiscordBotService {
 
   async registerSlashCommands(): Promise<void> {
     const body = this.commands.map((command) => command.data.toJSON());
+    const guildIds = this.getCommandRegistrationGuildIds();
 
-    const route =
-      this.env.DISCORD_GUILD_ID !== undefined
-        ? Routes.applicationGuildCommands(this.env.DISCORD_CLIENT_ID, this.env.DISCORD_GUILD_ID)
-        : Routes.applicationCommands(this.env.DISCORD_CLIENT_ID);
+    if (guildIds.length === 0) {
+      const route = Routes.applicationCommands(this.env.DISCORD_CLIENT_ID);
+      await this.rest.put(route, { body });
+      this.logger.info({ count: body.length, scope: 'global' }, 'Registered slash commands');
+      return;
+    }
 
-    await this.rest.put(route, { body });
-    this.logger.info(
-      { count: body.length, guildId: this.env.DISCORD_GUILD_ID ?? 'global' },
-      'Registered slash commands',
-    );
+    for (const guildId of guildIds) {
+      const route = Routes.applicationGuildCommands(this.env.DISCORD_CLIENT_ID, guildId);
+      await this.rest.put(route, { body });
+    }
+
+    this.logger.info({ count: body.length, guildIds }, 'Registered slash commands');
   }
 
   async start(): Promise<void> {
     await this.client.login(this.env.DISCORD_TOKEN);
+  }
+
+  private getCommandRegistrationGuildIds(): string[] {
+    const guildIds = new Set<string>();
+
+    const addGuildIds = (value?: string): void => {
+      if (!value) {
+        return;
+      }
+
+      value
+        .split(',')
+        .map((guildId) => guildId.trim())
+        .filter(Boolean)
+        .forEach((guildId) => guildIds.add(guildId));
+    };
+
+    addGuildIds(this.env.DISCORD_GUILD_ID);
+    addGuildIds(this.env.DISCORD_GUILD_IDS);
+
+    return [...guildIds];
   }
 
   private registerEventHandlers(): void {

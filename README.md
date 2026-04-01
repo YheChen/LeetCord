@@ -106,18 +106,26 @@ Then fill in the required values.
 | -------- | ----------- |
 | `DISCORD_TOKEN` | Discord bot token from the Discord Developer Portal. |
 | `DISCORD_CLIENT_ID` | Discord application client ID. |
-| `DISCORD_GUILD_ID` | Optional. If set, slash commands are registered only to that guild. If omitted, commands are registered globally. |
+| `DISCORD_GUILD_ID` | Optional. If set, slash commands are registered to that one guild for fast development updates. |
+| `DISCORD_GUILD_IDS` | Optional. Comma-separated guild IDs for fast multi-server development registration. |
 | `DATABASE_URL` | PostgreSQL connection string. |
 | `API_PORT` | Port for the Fastify API. |
 | `BOT_PUBLIC_URL` | Public URL reserved for callback/verification flows. |
 | `LEETCODE_FETCH_USER_AGENT` | User-agent string for LeetCode HTTP requests. |
 | `LOG_LEVEL` | Pino log level. |
 
-#### Important `DISCORD_GUILD_ID` behavior
+#### Command registration behavior
 
-- If `DISCORD_GUILD_ID` is set, the bot registers slash commands only for that one server.
-- If you invite the bot to a different server, update `DISCORD_GUILD_ID` to that server’s ID and restart the bot.
-- If you want the commands available in every server, remove `DISCORD_GUILD_ID` and restart the bot. Global command propagation can take a little while.
+- If `DISCORD_GUILD_IDS` is set, the bot registers slash commands to each guild in that comma-separated list.
+- If `DISCORD_GUILD_IDS` is empty but `DISCORD_GUILD_ID` is set, the bot registers slash commands to that one guild.
+- If neither is set, the bot registers commands globally for all servers. Global command propagation can take a little while.
+- For fast development across multiple servers, prefer `DISCORD_GUILD_IDS`.
+
+Example:
+
+```env
+DISCORD_GUILD_IDS=123456789012345678,987654321098765432
+```
 
 #### `DATABASE_URL` examples
 
@@ -209,8 +217,9 @@ Healthy startup usually includes logs like:
    - Minimum practical set: `View Channels`, `Send Messages`, `Embed Links`
 5. Open the generated invite URL, choose your server, and authorize the bot.
 6. Make sure `.env` is configured for that server:
-   - set `DISCORD_GUILD_ID=<that_server_id>` for guild-scoped development commands
-   - or remove `DISCORD_GUILD_ID` for global commands
+   - set `DISCORD_GUILD_ID=<that_server_id>` for one fast dev guild
+   - or set `DISCORD_GUILD_IDS=<guild_1>,<guild_2>` for multiple fast dev guilds
+   - or remove both to use global commands
 7. Restart the bot so it re-registers slash commands.
 
 ### API endpoints
@@ -226,7 +235,7 @@ The API app exposes:
 #### Slash commands do not appear in Discord
 
 - Make sure the bot was invited with the `applications.commands` scope.
-- Check whether `DISCORD_GUILD_ID` is pointing at a different server.
+- Check whether `DISCORD_GUILD_ID` or `DISCORD_GUILD_IDS` is pointing at different servers.
 - Restart the bot after changing `.env`.
 - If using global commands, give Discord some time to propagate them.
 
