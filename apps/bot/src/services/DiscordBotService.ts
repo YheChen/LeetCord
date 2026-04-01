@@ -893,8 +893,7 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
             },
             {
               name: '🔔 Mentions',
-              value:
-                `Run \`/${DISCORD_COMMANDS.ME}\` and use the button to control whether automatic completion posts ping you.`,
+              value: `Run \`/${DISCORD_COMMANDS.ME}\` and use the button to control whether automatic completion posts ping you.`,
             },
           );
 
@@ -971,8 +970,8 @@ export const createCoreButtonHandlers = (services: BotCommandServices): ButtonHa
 
       await interaction.followUp({
         content: nextEnabled
-          ? 'Automatic completion posts can ping you again.'
-          : 'Automatic completion posts will use your LeetCode username instead of pinging you.',
+          ? 'Daily problem completion posts can ping you again.'
+          : 'Daily problem completion posts will use your LeetCode username instead of pinging you.',
         ephemeral: true,
       });
     },
