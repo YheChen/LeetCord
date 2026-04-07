@@ -38,6 +38,7 @@ type BotDatabaseClient = ReturnType<typeof getPrismaClient>;
 
 interface BotCommandServices {
   db: BotDatabaseClient;
+  botPublicUrl: string;
   linkService: LinkService;
   guildMembershipService: GuildMembershipService;
   guildSettingsService: GuildSettingsService;
@@ -57,7 +58,7 @@ export interface ButtonHandler {
 /** Per-user command cooldowns (in seconds). Unlisted commands have no cooldown. */
 const COMMAND_COOLDOWNS: Partial<Record<string, number>> = {
   [DISCORD_COMMANDS.ME]: 10,
-  [DISCORD_COMMANDS.DAILY]: 5,
+  [DISCORD_COMMANDS.DAILY]: 60,
   [DISCORD_COMMANDS.STREAK]: 10,
   [DISCORD_COMMANDS.LEADERBOARD]: 10,
   [DISCORD_COMMANDS.LINK]: 15,
@@ -76,6 +77,18 @@ const buildCompletionFeedMentionsToggleRow = (
       .setLabel(enabled ? 'Disable completion pings' : 'Enable completion pings')
       .setStyle(enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
   );
+
+interface DailyCompletionRefreshApiResponse {
+  status: 'refreshed' | 'not-linked' | 'daily-not-cached';
+  completed: boolean | null;
+}
+
+const buildApiUrl = (baseUrl: string, path: string): string => {
+  const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  const normalizedPath = path.replace(/^\//, '');
+
+  return new URL(normalizedPath, normalizedBaseUrl).toString();
+};
 
 export class DiscordBotService {
   private readonly client: Client;
@@ -299,6 +312,44 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
     }
   };
 
+  const refreshDailyCompletionFromApi = async (discordUserId: string): Promise<boolean | null> => {
+    const url = buildApiUrl(services.botPublicUrl, '/daily/refresh-completion');
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ discordUserId }),
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Daily refresh API responded with ${response.status}`);
+      }
+
+      const payload = (await response.json()) as Partial<DailyCompletionRefreshApiResponse>;
+
+      if (payload.status === 'refreshed' && typeof payload.completed === 'boolean') {
+        return payload.completed;
+      }
+
+      return null;
+    } catch (error) {
+      commandLogger.warn(
+        {
+          err: error instanceof Error ? error.message : error,
+          discordUserId,
+          url,
+        },
+        'Failed to refresh daily completion from API',
+      );
+
+      return null;
+    }
+  };
+
   const ping = new SlashCommandBuilder()
     .setName(DISCORD_COMMANDS.PING)
     .setDescription('Check if the bot is alive');
@@ -327,7 +378,7 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
 
   const daily = new SlashCommandBuilder()
     .setName(DISCORD_COMMANDS.DAILY)
-    .setDescription("Show today's LeetCode daily problem");
+    .setDescription("Show today's LeetCode daily problem and refresh your completion status");
 
   const leaderboard = new SlashCommandBuilder()
     .setName(DISCORD_COMMANDS.LEADERBOARD)
@@ -410,8 +461,8 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
         await interaction.reply({
           content: [
             `Linking started for \`${username}\`.`,
-            `1. Put this code in your LeetCode profile bio: \`${verificationCode}\``,
-            '2. Save your profile bio.',
+            `1. Put this code in the README section of your LeetCode profile: \`${verificationCode}\``,
+            '2. Save your LeetCode profile README.',
             `3. Run \`/${DISCORD_COMMANDS.VERIFY}\` before <t:${expiresUnix}:F>.`,
           ].join('\n'),
           ephemeral: true,
@@ -453,7 +504,7 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
 
         await interaction.reply({
           content:
-            'Verification failed. Make sure the code is in your LeetCode bio, then try again in a minute.',
+            'Verification failed. Make sure the code is in the README section of your LeetCode profile, then try again in a minute.',
           ephemeral: true,
         });
       },
@@ -581,9 +632,14 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
       data: daily,
       execute: async (interaction) => {
         const today = toDateOnly(new Date());
-        const dailyProblem = await services.db.dailyProblem.findUnique({
-          where: { date: today },
-        });
+        const [dailyProblem, callerLink] = await Promise.all([
+          services.db.dailyProblem.findUnique({
+            where: { date: today },
+          }),
+          services.db.userLink.findUnique({
+            where: { discordUserId: interaction.user.id },
+          }),
+        ]);
 
         if (!dailyProblem) {
           await interaction.reply({
@@ -593,22 +649,29 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
           return;
         }
 
+        await interaction.deferReply();
+
         let completionText = 'Not linked';
-        const callerLink = await services.db.userLink.findUnique({
-          where: { discordUserId: interaction.user.id },
-        });
 
         if (callerLink?.verified) {
           await ensureGuildMembership(interaction, interaction.user.id);
-          const completion = await services.db.dailyCompletion.findUnique({
-            where: {
-              userLinkId_dailyProblemId: {
-                userLinkId: callerLink.id,
-                dailyProblemId: dailyProblem.id,
+
+          const refreshedCompletion = await refreshDailyCompletionFromApi(interaction.user.id);
+
+          if (typeof refreshedCompletion === 'boolean') {
+            completionText = refreshedCompletion ? 'Completed' : 'Not completed';
+          } else {
+            const completion = await services.db.dailyCompletion.findUnique({
+              where: {
+                userLinkId_dailyProblemId: {
+                  userLinkId: callerLink.id,
+                  dailyProblemId: dailyProblem.id,
+                },
               },
-            },
-          });
-          completionText = completion?.completed ? 'Completed' : 'Not completed';
+            });
+
+            completionText = completion?.completed ? 'Completed' : 'Not completed';
+          }
         }
 
         const mappedDailyProblem: LeetCodeDailyProblem = {
@@ -622,7 +685,7 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
 
         const embed = buildDailyProblemEmbed(mappedDailyProblem, completionText);
 
-        await interaction.reply({
+        await interaction.editReply({
           embeds: [embed],
         });
       },
@@ -902,7 +965,7 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
               name: '🚀 Getting Started',
               value: [
                 `1\. Run \`/${DISCORD_COMMANDS.LINK} username:<your_username>\``,
-                '2\. Paste the code into your [LeetCode bio](https://leetcode.com/profile/)',
+                '2\. Paste the code into the README section of your [LeetCode profile](https://leetcode.com/profile/)',
                 `3\. Run \`/${DISCORD_COMMANDS.VERIFY}\` to finish linking`,
               ].join('\n'),
             },
@@ -914,7 +977,7 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
               name: '📊 Commands',
               value: [
                 `\`/${DISCORD_COMMANDS.ME}\` — Your LeetCode stats`,
-                `\`/${DISCORD_COMMANDS.DAILY}\` — Today's daily problem`,
+                `\`/${DISCORD_COMMANDS.DAILY}\` — Today's daily problem and refreshed completion status`,
                 `\`/${DISCORD_COMMANDS.STREAK}\` — Your completion streak`,
                 `\`/${DISCORD_COMMANDS.LEADERBOARD}\` — Server leaderboard`,
                 `\`/${DISCORD_COMMANDS.UNLINK}\` — Unlink your account`,

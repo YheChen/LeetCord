@@ -8,7 +8,6 @@ import { createLogger } from '@leetcord/shared';
 import { loadWorkerEnv } from './config/env';
 import { runComputeWeeklyLeaderboardJob } from './jobs/computeWeeklyLeaderboardJob';
 import { runFetchDailyProblemJob } from './jobs/fetchDailyProblemJob';
-import { runPostDailyProblemJob } from './jobs/postDailyProblemJob';
 import { runRefreshDailyCompletionJob } from './jobs/refreshDailyCompletionJob';
 import { runRefreshUserStatsJob } from './jobs/refreshUserStatsJob';
 import { registerDailyScheduler } from './schedulers/dailyScheduler';
@@ -32,7 +31,6 @@ const main = async (): Promise<void> => {
   await runRefreshUserStatsJob(statsSyncService);
   await runRefreshDailyCompletionJob(statsSyncService);
   await runComputeWeeklyLeaderboardJob(db, statsSyncService);
-  await runPostDailyProblemJob(db, discordRest);
 
   registerDailyScheduler({ db, statsSyncService, discordRest });
   registerFrequentSchedulers({ db, statsSyncService, discordRest });

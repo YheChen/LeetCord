@@ -15,8 +15,12 @@ export interface DailySchedulerDependencies {
 }
 
 export const registerDailyScheduler = (dependencies: DailySchedulerDependencies): void => {
-  cron.schedule(DAILY_POST_CRON_UTC, async () => {
-    await runFetchDailyProblemJob(dependencies.statsSyncService);
-    await runPostDailyProblemJob(dependencies.db, dependencies.discordRest);
-  });
+  cron.schedule(
+    DAILY_POST_CRON_UTC,
+    async () => {
+      await runFetchDailyProblemJob(dependencies.statsSyncService);
+      await runPostDailyProblemJob(dependencies.db, dependencies.discordRest);
+    },
+    { timezone: 'UTC' },
+  );
 };

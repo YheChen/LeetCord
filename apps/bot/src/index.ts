@@ -33,6 +33,7 @@ const main = async (): Promise<void> => {
 
   const commands = createCoreSlashCommands({
     db,
+    botPublicUrl: env.BOT_PUBLIC_URL,
     linkService,
     guildMembershipService,
     guildSettingsService,
@@ -40,6 +41,7 @@ const main = async (): Promise<void> => {
   });
   const buttonHandlers = createCoreButtonHandlers({
     db,
+    botPublicUrl: env.BOT_PUBLIC_URL,
     linkService,
     guildMembershipService,
     guildSettingsService,

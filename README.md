@@ -16,10 +16,10 @@ This repository is a `pnpm`-powered TypeScript monorepo with separate apps for t
 
 ### Features
 
-- Link a Discord user to a LeetCode account using a verification code placed in the user’s LeetCode bio.
+- Link a Discord user to a LeetCode account using a verification code placed in the README section of the user’s LeetCode profile.
 - View cached LeetCode profile stats, including total solved, difficulty breakdown, streak, contest rating, and today’s daily status.
 - Cache the current LeetCode daily problem in the database and show it through slash commands.
-- Track daily completion status for linked users.
+- Track daily completion status for linked users, and refresh the caller's completion state on demand when `/daily` runs.
 - Show server leaderboards for total solved, daily completions, and weekly progress snapshots.
 - Post the daily problem into a configured server channel.
 - Post automatic completion-feed updates when a linked user newly completes today’s daily.
@@ -32,11 +32,11 @@ This repository is a `pnpm`-powered TypeScript monorepo with separate apps for t
 | Command | Description |
 | ------- | ----------- |
 | `/ping` | Check if the bot is alive. |
-| `/link username:<your_username>` | Start linking your LeetCode account and generate a verification code. |
-| `/verify` | Complete the link verification by checking your LeetCode bio. |
+| `/link username:<your_username>` | Start linking your LeetCode account and generate a verification code to place in the README section of your LeetCode profile. |
+| `/verify` | Complete the link verification by checking the README section of your LeetCode profile. |
 | `/unlink` | Unlink your LeetCode account. |
 | `/me [user]` | Show cached LeetCode stats for yourself or another linked user. On your own `/me`, a button lets you enable or disable completion-feed pings. |
-| `/daily` | Show today’s cached LeetCode daily problem and your completion status if you are linked. |
+| `/daily` | Show today’s cached LeetCode daily problem and refresh your completion status if you are linked. This command has a 60-second per-user cooldown. |
 | `/streak [user]` | Show current streak, longest streak, and total completed dailies. |
 | `/leaderboard mode:<total\|weekly\|daily>` | Show the server leaderboard for all-time solved, this week’s progress, or today’s completions. |
 | `/help` | Show setup instructions and the command list. |
@@ -61,13 +61,12 @@ When the worker starts, it immediately:
 - refreshes cached stats for linked users
 - refreshes daily completion state for linked users
 - computes weekly leaderboard snapshots
-- posts the daily problem if a configured guild channel exists and it has not already been posted
 
 #### Scheduled jobs
 
 | Job | Schedule | Description |
 | --- | -------- | ----------- |
-| Fetch and post daily problem | `00:05 UTC` daily | Refreshes the cached daily problem and posts it to configured channels. |
+| Fetch and post daily problem | `00:05 UTC` daily | Refreshes the cached daily problem and posts it to configured channels at a fixed UTC time. |
 | Daily completion refresh | Every 10 minutes | Checks linked users for new daily completions. |
 | Completion feed | Every 10 minutes, when new completions are found | Posts `@user just completed today's daily` into configured daily channels. If a user disables completion pings, the post uses their LeetCode username instead of pinging them. |
 | Stats refresh | Every 60 minutes | Pulls fresh LeetCode stats for all verified users. |
@@ -110,7 +109,7 @@ Then fill in the required values.
 | `DISCORD_GUILD_IDS` | Optional. Comma-separated guild IDs for fast multi-server development registration. |
 | `DATABASE_URL` | PostgreSQL connection string. |
 | `API_PORT` | Port for the Fastify API. |
-| `BOT_PUBLIC_URL` | Public URL reserved for callback/verification flows. |
+| `BOT_PUBLIC_URL` | Base URL the bot uses to reach the API for verification and on-demand daily completion refreshes. |
 | `LEETCODE_FETCH_USER_AGENT` | User-agent string for LeetCode HTTP requests. |
 | `LOG_LEVEL` | Pino log level. |
 
@@ -227,6 +226,7 @@ Healthy startup usually includes logs like:
 The API app exposes:
 
 - `GET /health`
+- `POST /daily/refresh-completion`
 - `POST /link/verification/start`
 - `POST /link/verification/complete`
 
@@ -258,5 +258,6 @@ Users can run `/me` and use the button on their own stats response to disable co
 - Prisma is used for the PostgreSQL schema and client.
 - Zod is used for environment validation and external response validation.
 - `discord.js` powers the bot and only slash commands are used.
+- Keep this README in sync with user-facing feature and command changes.
 - Fastify is used for the HTTP API.
 - `node-cron` is used for scheduled worker jobs.

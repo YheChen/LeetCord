@@ -1,4 +1,4 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { DailyProblem, Prisma, PrismaClient, UserLink } from '@prisma/client';
 import {
   WeeklyLeaderboardEntry,
   WeeklyLeaderboardSnapshotPayload,
@@ -14,6 +14,11 @@ export interface NewDailyCompletion {
   userLinkId: string;
   discordUserId: string;
   leetcodeUsername: string;
+}
+
+export interface DailyCompletionRefreshResult {
+  status: 'refreshed' | 'not-linked' | 'daily-not-cached';
+  completed: boolean | null;
 }
 
 export class StatsSyncService {
@@ -96,42 +101,7 @@ export class StatsSyncService {
 
     for (const link of links) {
       try {
-        const completed = await this.leetCodeService.checkDailyCompletion(
-          link.leetcodeUsername,
-          daily.slug,
-        );
-
-        // Check if this is a new completion (not previously recorded as completed)
-        const existing = await this.db.dailyCompletion.findUnique({
-          where: {
-            userLinkId_dailyProblemId: {
-              userLinkId: link.id,
-              dailyProblemId: daily.id,
-            },
-          },
-        });
-
-        const isNewCompletion = completed && (!existing || !existing.completed);
-
-        await this.db.dailyCompletion.upsert({
-          where: {
-            userLinkId_dailyProblemId: {
-              userLinkId: link.id,
-              dailyProblemId: daily.id,
-            },
-          },
-          update: {
-            completed,
-            detectedAt: new Date(),
-          },
-          create: {
-            userLinkId: link.id,
-            dailyProblemId: daily.id,
-            completed,
-            detectedAt: new Date(),
-            source: 'worker',
-          },
-        });
+        const { isNewCompletion } = await this.refreshDailyCompletionForLink(link, daily, 'worker');
 
         if (isNewCompletion) {
           newlyCompleted.push({
@@ -152,6 +122,41 @@ export class StatsSyncService {
     }
 
     return newlyCompleted;
+  }
+
+  async refreshDailyCompletionForDiscordUser(
+    discordUserId: string,
+  ): Promise<DailyCompletionRefreshResult> {
+    const today = toDateOnly(new Date());
+    const [daily, link] = await Promise.all([
+      this.db.dailyProblem.findUnique({
+        where: { date: today },
+      }),
+      this.db.userLink.findUnique({
+        where: { discordUserId },
+      }),
+    ]);
+
+    if (!daily) {
+      return {
+        status: 'daily-not-cached',
+        completed: null,
+      };
+    }
+
+    if (!link?.verified) {
+      return {
+        status: 'not-linked',
+        completed: null,
+      };
+    }
+
+    const { completed } = await this.refreshDailyCompletionForLink(link, daily, 'api');
+
+    return {
+      status: 'refreshed',
+      completed,
+    };
   }
 
   async computeWeeklyLeaderboardSnapshotForGuild(guildId: string): Promise<void> {
@@ -225,5 +230,54 @@ export class StatsSyncService {
         payloadJson: payload as unknown as Prisma.InputJsonValue,
       },
     });
+  }
+
+  private async refreshDailyCompletionForLink(
+    link: UserLink,
+    daily: DailyProblem,
+    source: string,
+  ): Promise<{ completed: boolean; isNewCompletion: boolean }> {
+    const completed = await this.leetCodeService.checkDailyCompletion(
+      link.leetcodeUsername,
+      daily.slug,
+    );
+
+    const existing = await this.db.dailyCompletion.findUnique({
+      where: {
+        userLinkId_dailyProblemId: {
+          userLinkId: link.id,
+          dailyProblemId: daily.id,
+        },
+      },
+    });
+
+    const detectedAt = new Date();
+    const isNewCompletion = completed && (!existing || !existing.completed);
+
+    await this.db.dailyCompletion.upsert({
+      where: {
+        userLinkId_dailyProblemId: {
+          userLinkId: link.id,
+          dailyProblemId: daily.id,
+        },
+      },
+      update: {
+        completed,
+        detectedAt,
+        source,
+      },
+      create: {
+        userLinkId: link.id,
+        dailyProblemId: daily.id,
+        completed,
+        detectedAt,
+        source,
+      },
+    });
+
+    return {
+      completed,
+      isNewCompletion,
+    };
   }
 }
