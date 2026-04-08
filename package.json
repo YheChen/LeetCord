@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "pnpm -r run build",
+    "dev": "pnpm build && pnpm -r --parallel --stream --filter @leetcord/api --filter @leetcord/bot --filter @leetcord/worker dev",
     "dev:bot": "pnpm --filter @leetcord/bot dev",
     "dev:api": "pnpm --filter @leetcord/api dev",
     "dev:worker": "pnpm --filter @leetcord/worker dev",

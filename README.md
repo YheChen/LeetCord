@@ -180,18 +180,14 @@ pnpm dev:worker
 Run all three long-lived dev processes in one terminal:
 
 ```bash
-pnpm -r --parallel --stream \
-  --filter @leetcord/api \
-  --filter @leetcord/bot \
-  --filter @leetcord/worker \
-  dev
+pnpm dev
 ```
 
 Stop everything with `Ctrl+C`.
 
-#### 5. Build if shared packages changed
+#### 5. Build if workspace packages changed
 
-If you changed shared package code and dev output looks stale, rebuild the workspace:
+The app `dev` scripts import workspace packages from their built `dist/` outputs. If you changed or pulled updates in `packages/*` and `ts-node` reports missing methods or stale types, rebuild the workspace:
 
 ```bash
 pnpm build
