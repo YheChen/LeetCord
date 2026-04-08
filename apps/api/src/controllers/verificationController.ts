@@ -1,4 +1,4 @@
-import { LinkService } from '@leetcord/core';
+import { AlreadyLinkedError, LinkService } from '@leetcord/core';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
@@ -24,12 +24,25 @@ export const createStartVerificationHandler =
     }
 
     const { discordUserId, leetcodeUsername } = parsedBody.data;
-    const result = await linkService.createVerification(discordUserId, leetcodeUsername);
-    void reply.status(200).send({
-      status: 'pending',
-      verificationCode: result.verificationCode,
-      expiresAt: result.expiresAt.toISOString()
-    });
+    try {
+      const result = await linkService.createVerification(discordUserId, leetcodeUsername);
+
+      void reply.status(200).send({
+        status: 'pending',
+        verificationCode: result.verificationCode,
+        expiresAt: result.expiresAt.toISOString()
+      });
+    } catch (error) {
+      if (error instanceof AlreadyLinkedError) {
+        void reply.status(409).send({
+          error: 'Discord account already linked',
+          leetcodeUsername: error.leetcodeUsername
+        });
+        return;
+      }
+
+      throw error;
+    }
   };
 
 export const createCompleteVerificationHandler =

@@ -10,6 +10,13 @@ export interface CreateVerificationResult {
   expiresAt: Date;
 }
 
+export class AlreadyLinkedError extends Error {
+  constructor(public readonly leetcodeUsername: string) {
+    super(`Discord account is already linked to ${leetcodeUsername}`)
+    this.name = 'AlreadyLinkedError'
+  }
+}
+
 export class LinkService {
   constructor(
     private readonly db: PrismaClient,
@@ -17,6 +24,14 @@ export class LinkService {
   ) {}
 
   async createVerification(discordUserId: string, leetcodeUsername: string): Promise<CreateVerificationResult> {
+    const existingLink = await this.db.userLink.findUnique({
+      where: { discordUserId }
+    });
+
+    if (existingLink?.verified) {
+      throw new AlreadyLinkedError(existingLink.leetcodeUsername);
+    }
+
     const verificationCode = this.generateVerificationCode();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 30);
 
@@ -88,4 +103,3 @@ export class LinkService {
     return randomBytes(4).toString('hex');
   }
 }
-

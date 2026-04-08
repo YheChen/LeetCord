@@ -1,6 +1,7 @@
 import { REST } from '@discordjs/rest';
 import { getPrismaClient } from '@leetcord/database';
 import {
+  AlreadyLinkedError,
   GuildMembershipService,
   GuildSettingsService,
   LeaderboardService,
@@ -485,10 +486,29 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
       data: link,
       execute: async (interaction) => {
         const username = interaction.options.getString('username', true).trim();
-        const { verificationCode, expiresAt } = await services.linkService.createVerification(
-          interaction.user.id,
-          username,
-        );
+        let verificationCode: string;
+        let expiresAt: Date;
+
+        try {
+          ({ verificationCode, expiresAt } = await services.linkService.createVerification(
+            interaction.user.id,
+            username,
+          ));
+        } catch (error) {
+          if (error instanceof AlreadyLinkedError) {
+            await interaction.reply({
+              content: [
+                `You are already linked to \`${error.leetcodeUsername}\`.`,
+                `Run \`/${DISCORD_COMMANDS.UNLINK}\` first if you want to switch accounts.`,
+              ].join('\n'),
+              ephemeral: true,
+            });
+            return;
+          }
+
+          throw error;
+        }
+
         const expiresUnix = Math.floor(expiresAt.getTime() / 1000);
 
         await interaction.reply({
@@ -522,6 +542,14 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
         if (!linkRow) {
           await interaction.reply({
             content: `No pending link found. Start with \`/${DISCORD_COMMANDS.LINK} username:<your_username>\`.`,
+            ephemeral: true,
+          });
+          return;
+        }
+
+        if (linkRow.verified) {
+          await interaction.reply({
+            content: `You are already linked to \`${linkRow.leetcodeUsername}\`.`,
             ephemeral: true,
           });
           return;
@@ -700,21 +728,25 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
         if (callerLink?.verified) {
           await ensureGuildMembership(interaction, interaction.user.id);
 
-          const refreshedCompletion = await refreshDailyCompletionFromApi(interaction.user.id);
-
-          if (typeof refreshedCompletion === 'boolean') {
-            completionText = refreshedCompletion ? 'Completed' : 'Not completed';
-          } else {
-            const completion = await services.db.dailyCompletion.findUnique({
-              where: {
-                userLinkId_dailyProblemId: {
-                  userLinkId: callerLink.id,
-                  dailyProblemId: dailyProblem.id,
-                },
+          const existingCompletion = await services.db.dailyCompletion.findUnique({
+            where: {
+              userLinkId_dailyProblemId: {
+                userLinkId: callerLink.id,
+                dailyProblemId: dailyProblem.id,
               },
-            });
+            },
+          });
 
-            completionText = completion?.completed ? 'Completed' : 'Not completed';
+          if (existingCompletion?.completed) {
+            completionText = 'Completed';
+          } else {
+            const refreshedCompletion = await refreshDailyCompletionFromApi(interaction.user.id);
+
+            if (typeof refreshedCompletion === 'boolean') {
+              completionText = refreshedCompletion ? 'Completed' : 'Not completed';
+            } else {
+              completionText = existingCompletion?.completed ? 'Completed' : 'Not completed';
+            }
           }
         }
 
