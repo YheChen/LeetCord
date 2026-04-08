@@ -24,3 +24,11 @@ export const createRefreshDailyCompletionHandler =
 
     void reply.status(200).send(result);
   };
+
+export const createEnsureTodayDailyProblemCachedHandler =
+  (statsSyncService: StatsSyncService) =>
+  async (_request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const result = await statsSyncService.ensureTodayDailyProblemCached();
+
+    void reply.status(200).send(result);
+  };

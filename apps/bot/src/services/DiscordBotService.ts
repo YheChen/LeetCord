@@ -83,6 +83,10 @@ interface DailyCompletionRefreshApiResponse {
   completed: boolean | null;
 }
 
+interface DailyProblemCacheApiResponse {
+  status: 'cached' | 'already-cached';
+}
+
 const buildApiUrl = (baseUrl: string, path: string): string => {
   const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
   const normalizedPath = path.replace(/^\//, '');
@@ -347,6 +351,35 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
       );
 
       return null;
+    }
+  };
+
+  const ensureTodayDailyProblemCachedFromApi = async (): Promise<boolean> => {
+    const url = buildApiUrl(services.botPublicUrl, '/daily/ensure-cached');
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Daily ensure-cached API responded with ${response.status}`);
+      }
+
+      const payload = (await response.json()) as Partial<DailyProblemCacheApiResponse>;
+
+      return payload.status === 'cached' || payload.status === 'already-cached';
+    } catch (error) {
+      commandLogger.warn(
+        {
+          err: error instanceof Error ? error.message : error,
+          url,
+        },
+        'Failed to ensure today daily problem is cached from API',
+      );
+
+      return false;
     }
   };
 
@@ -632,7 +665,7 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
       data: daily,
       execute: async (interaction) => {
         const today = toDateOnly(new Date());
-        const [dailyProblem, callerLink] = await Promise.all([
+        let [dailyProblem, callerLink] = await Promise.all([
           services.db.dailyProblem.findUnique({
             where: { date: today },
           }),
@@ -642,14 +675,25 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
         ]);
 
         if (!dailyProblem) {
-          await interaction.reply({
-            content: "Today's daily problem is not cached yet. Try again shortly.",
-            ephemeral: true,
-          });
-          return;
-        }
+          await interaction.deferReply();
 
-        await interaction.deferReply();
+          const cached = await ensureTodayDailyProblemCachedFromApi();
+          if (cached) {
+            dailyProblem = await services.db.dailyProblem.findUnique({
+              where: { date: today },
+            });
+          }
+
+          if (!dailyProblem) {
+            await interaction.editReply({
+              content:
+                "Today's daily problem isn't cached yet, and the on-demand refresh failed. Try again shortly.",
+            });
+            return;
+          }
+        } else {
+          await interaction.deferReply();
+        }
 
         let completionText = 'Not linked';
 
@@ -981,7 +1025,7 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
                 `\`/${DISCORD_COMMANDS.VERIFY}\` — Finish linking your account`,
                 `\`/${DISCORD_COMMANDS.UNLINK}\` — Unlink your account`,
                 `\`/${DISCORD_COMMANDS.ME}\` — Your LeetCode stats`,
-                `\`/${DISCORD_COMMANDS.DAILY}\` — Today's daily problem and refreshed completion status`,
+                `\`/${DISCORD_COMMANDS.DAILY}\` — Today's daily problem, cached on demand, and refreshed completion status`,
                 `\`/${DISCORD_COMMANDS.STREAK}\` — Your completion streak`,
                 `\`/${DISCORD_COMMANDS.LEADERBOARD}\` — Server leaderboard`,
                 `\`/${DISCORD_COMMANDS.HELP}\` — Show this help message`,

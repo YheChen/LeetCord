@@ -21,7 +21,13 @@ export interface DailyCompletionRefreshResult {
   completed: boolean | null;
 }
 
+export interface DailyProblemCacheResult {
+  status: 'cached' | 'already-cached';
+}
+
 export class StatsSyncService {
+  private refreshTodayDailyProblemInFlight: Promise<void> | null = null;
+
   constructor(
     private readonly db: PrismaClient,
     private readonly leetCodeService: LeetCodeService,
@@ -82,6 +88,25 @@ export class StatsSyncService {
         fetchedAt: daily.fetchedAt,
       },
     });
+  }
+
+  async ensureTodayDailyProblemCached(): Promise<DailyProblemCacheResult> {
+    const today = toDateOnly(new Date());
+    const existing = await this.db.dailyProblem.findUnique({
+      where: { date: today },
+    });
+
+    if (existing) {
+      return {
+        status: 'already-cached',
+      };
+    }
+
+    await this.refreshTodayDailyProblemDeduped();
+
+    return {
+      status: 'cached',
+    };
   }
 
   async refreshDailyCompletionForAllUsers(): Promise<NewDailyCompletion[]> {
@@ -279,5 +304,15 @@ export class StatsSyncService {
       completed,
       isNewCompletion,
     };
+  }
+
+  private async refreshTodayDailyProblemDeduped(): Promise<void> {
+    if (!this.refreshTodayDailyProblemInFlight) {
+      this.refreshTodayDailyProblemInFlight = this.refreshTodayDailyProblem().finally(() => {
+        this.refreshTodayDailyProblemInFlight = null;
+      });
+    }
+
+    await this.refreshTodayDailyProblemInFlight;
   }
 }

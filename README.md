@@ -18,7 +18,7 @@ This repository is a `pnpm`-powered TypeScript monorepo with separate apps for t
 
 - Link a Discord user to a LeetCode account using a verification code placed in the README section of the user’s LeetCode profile.
 - View cached LeetCode profile stats, including total solved, difficulty breakdown, streak, contest rating, and today’s daily status.
-- Cache the current LeetCode daily problem in the database and show it through slash commands.
+- Cache the current LeetCode daily problem in the database and let `/daily` backfill it on demand if it is missing.
 - Track daily completion status for linked users, and refresh the caller's completion state on demand when `/daily` runs.
 - Show server leaderboards for total solved, daily completions, and weekly progress snapshots.
 - Post the daily problem into a configured server channel.
@@ -36,7 +36,7 @@ This repository is a `pnpm`-powered TypeScript monorepo with separate apps for t
 | `/verify` | Complete the link verification by checking the README section of your LeetCode profile. |
 | `/unlink` | Unlink your LeetCode account. |
 | `/me [user]` | Show cached LeetCode stats for yourself or another linked user. On your own `/me`, a button lets you enable or disable completion-feed pings. |
-| `/daily` | Show today’s cached LeetCode daily problem and refresh your completion status if you are linked. |
+| `/daily` | Show today’s LeetCode daily problem, attempt to cache it on demand if it is missing, and refresh your completion status if you are linked. |
 | `/streak [user]` | Show current streak, longest streak, and total completed dailies. |
 | `/leaderboard mode:<total\|weekly\|daily>` | Show the server leaderboard for all-time solved, this week’s progress, or today’s completions. |
 | `/help` | Show setup instructions and the command list. |
@@ -233,6 +233,7 @@ Healthy startup usually includes logs like:
 The API app exposes:
 
 - `GET /health`
+- `POST /daily/ensure-cached`
 - `POST /daily/refresh-completion`
 - `POST /link/verification/start`
 - `POST /link/verification/complete`
