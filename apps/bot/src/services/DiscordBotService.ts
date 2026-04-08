@@ -976,22 +976,35 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
             {
               name: '📊 Commands',
               value: [
+                `\`/${DISCORD_COMMANDS.PING}\` — Check if the bot is alive`,
+                `\`/${DISCORD_COMMANDS.LINK} username:<your_username>\` — Start linking your account`,
+                `\`/${DISCORD_COMMANDS.VERIFY}\` — Finish linking your account`,
+                `\`/${DISCORD_COMMANDS.UNLINK}\` — Unlink your account`,
                 `\`/${DISCORD_COMMANDS.ME}\` — Your LeetCode stats`,
                 `\`/${DISCORD_COMMANDS.DAILY}\` — Today's daily problem and refreshed completion status`,
                 `\`/${DISCORD_COMMANDS.STREAK}\` — Your completion streak`,
                 `\`/${DISCORD_COMMANDS.LEADERBOARD}\` — Server leaderboard`,
-                `\`/${DISCORD_COMMANDS.UNLINK}\` — Unlink your account`,
+                `\`/${DISCORD_COMMANDS.HELP}\` — Show this help message`,
               ].join('\n'),
               inline: true,
             },
             {
               name: '⚙️ Admin',
               value: [
-                `\`/${DISCORD_COMMANDS.SETUP_DAILY_CHANNEL}\``,
-                `\`/${DISCORD_COMMANDS.SETUP_TIMEZONE}\``,
-                `\`/${DISCORD_COMMANDS.SETUP_LEADERBOARD}\``,
+                `\`/${DISCORD_COMMANDS.SETUP_DAILY_CHANNEL}\` — Set the daily post channel`,
+                `\`/${DISCORD_COMMANDS.SETUP_TIMEZONE}\` — Set the guild timezone`,
+                `\`/${DISCORD_COMMANDS.SETUP_LEADERBOARD}\` — Enable or disable leaderboards`,
               ].join('\n'),
               inline: true,
+            },
+            {
+              name: '⏱ Cooldowns',
+              value: [
+                `\`/${DISCORD_COMMANDS.DAILY}\` — 60s`,
+                `\`/${DISCORD_COMMANDS.LINK}\`, \`/${DISCORD_COMMANDS.VERIFY}\` — 15s`,
+                `\`/${DISCORD_COMMANDS.ME}\`, \`/${DISCORD_COMMANDS.STREAK}\`, \`/${DISCORD_COMMANDS.LEADERBOARD}\` — 10s`,
+                'All other commands — none',
+              ].join('\n'),
             },
             {
               name: '🔔 Mentions',

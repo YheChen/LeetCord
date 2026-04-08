@@ -36,10 +36,17 @@ This repository is a `pnpm`-powered TypeScript monorepo with separate apps for t
 | `/verify` | Complete the link verification by checking the README section of your LeetCode profile. |
 | `/unlink` | Unlink your LeetCode account. |
 | `/me [user]` | Show cached LeetCode stats for yourself or another linked user. On your own `/me`, a button lets you enable or disable completion-feed pings. |
-| `/daily` | Show today’s cached LeetCode daily problem and refresh your completion status if you are linked. This command has a 60-second per-user cooldown. |
+| `/daily` | Show today’s cached LeetCode daily problem and refresh your completion status if you are linked. |
 | `/streak [user]` | Show current streak, longest streak, and total completed dailies. |
 | `/leaderboard mode:<total\|weekly\|daily>` | Show the server leaderboard for all-time solved, this week’s progress, or today’s completions. |
 | `/help` | Show setup instructions and the command list. |
+
+### Command cooldowns
+
+- `/daily`: 60 seconds
+- `/link`, `/verify`: 15 seconds
+- `/me`, `/streak`, `/leaderboard`: 10 seconds
+- All other commands: no cooldown
 
 #### Admin commands
 
