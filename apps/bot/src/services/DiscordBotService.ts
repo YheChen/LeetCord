@@ -267,7 +267,11 @@ export class DiscordBotService {
           'Command execution failed',
         );
         try {
-          if (interaction.replied || interaction.deferred) {
+          if (interaction.deferred && !interaction.replied) {
+            await interaction.editReply({
+              content: 'Something went wrong while executing that command.',
+            });
+          } else if (interaction.replied || interaction.deferred) {
             await interaction.followUp({
               content: 'Something went wrong while executing that command.',
               ephemeral: true,
@@ -692,6 +696,8 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
     {
       data: daily,
       execute: async (interaction) => {
+        await interaction.deferReply();
+
         const today = toDateOnly(new Date());
         let [dailyProblem, callerLink] = await Promise.all([
           services.db.dailyProblem.findUnique({
@@ -703,8 +709,6 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
         ]);
 
         if (!dailyProblem) {
-          await interaction.deferReply();
-
           const cached = await ensureTodayDailyProblemCachedFromApi();
           if (cached) {
             dailyProblem = await services.db.dailyProblem.findUnique({
@@ -719,8 +723,6 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
             });
             return;
           }
-        } else {
-          await interaction.deferReply();
         }
 
         let completionText = 'Not linked';
