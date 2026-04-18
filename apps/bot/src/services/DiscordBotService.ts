@@ -812,7 +812,7 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
                 .slice(0, 15)
                 .map(
                   (entry, index) =>
-                    `${medals[index] ?? `**${index + 1}.**`} <@${entry.discordUserId}> · **${entry.totalSolved}** solved (🟢${entry.easySolved} 🟡${entry.mediumSolved} 🔴${entry.hardSolved})`,
+                    `${medals[index] ?? `**${index + 1}.**`} <@${entry.discordUserId}> (\`${entry.leetcodeUsername}\`) · **${entry.totalSolved}** solved (🟢${entry.easySolved} 🟡${entry.mediumSolved} 🔴${entry.hardSolved})`,
                 )
                 .join('\n'),
             );
@@ -1181,7 +1181,7 @@ const buildWeeklyLeaderboardEmbed = (snapshot: WeeklyLeaderboardSnapshotPayload)
       ? entries
           .map(
             (entry, index) =>
-              `${medals[index] ?? `**${index + 1}.**`} <@${entry.discordUserId}> · **+${
+              `${medals[index] ?? `**${index + 1}.**`} <@${entry.discordUserId}> (\`${entry.leetcodeUsername}\`) · **+${
                 entry.solvedDelta
               }** this week`,
           )
