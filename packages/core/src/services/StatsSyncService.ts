@@ -19,6 +19,7 @@ export interface NewDailyCompletion {
 export interface DailyCompletionRefreshResult {
   status: 'refreshed' | 'not-linked' | 'daily-not-cached';
   completed: boolean | null;
+  isNewCompletion: boolean;
 }
 
 export interface DailyProblemCacheResult {
@@ -166,6 +167,7 @@ export class StatsSyncService {
       return {
         status: 'daily-not-cached',
         completed: null,
+        isNewCompletion: false,
       };
     }
 
@@ -173,14 +175,20 @@ export class StatsSyncService {
       return {
         status: 'not-linked',
         completed: null,
+        isNewCompletion: false,
       };
     }
 
-    const { completed } = await this.refreshDailyCompletionForLink(link, daily, 'api');
+    const { completed, isNewCompletion } = await this.refreshDailyCompletionForLink(
+      link,
+      daily,
+      'api',
+    );
 
     return {
       status: 'refreshed',
       completed,
+      isNewCompletion,
     };
   }
 

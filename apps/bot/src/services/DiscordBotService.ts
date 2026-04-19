@@ -13,6 +13,7 @@ import {
   LeetCodeProfileStats,
   WeeklyLeaderboardSnapshotPayload,
   createLogger,
+  formatDailyCompletionAnnouncement,
   toDateOnly,
 } from '@leetcord/shared';
 import { Routes } from 'discord-api-types/v10';
@@ -82,10 +83,16 @@ const buildCompletionFeedMentionsToggleRow = (
 interface DailyCompletionRefreshApiResponse {
   status: 'refreshed' | 'not-linked' | 'daily-not-cached';
   completed: boolean | null;
+  isNewCompletion?: boolean;
 }
 
 interface DailyProblemCacheApiResponse {
   status: 'cached' | 'already-cached';
+}
+
+interface DailyCompletionRefreshOutcome {
+  completed: boolean;
+  isNewCompletion: boolean;
 }
 
 const buildApiUrl = (baseUrl: string, path: string): string => {
@@ -94,6 +101,9 @@ const buildApiUrl = (baseUrl: string, path: string): string => {
 
   return new URL(normalizedPath, normalizedBaseUrl).toString();
 };
+
+const buildDailyCompletionAnnouncementEmbed = (description: string): EmbedBuilder =>
+  new EmbedBuilder().setColor(0x00b8a3).setDescription(description);
 
 export class DiscordBotService {
   private readonly client: Client;
@@ -321,7 +331,9 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
     }
   };
 
-  const refreshDailyCompletionFromApi = async (discordUserId: string): Promise<boolean | null> => {
+  const refreshDailyCompletionFromApi = async (
+    discordUserId: string,
+  ): Promise<DailyCompletionRefreshOutcome | null> => {
     const url = buildApiUrl(services.botPublicUrl, '/daily/refresh-completion');
 
     try {
@@ -341,7 +353,10 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
       const payload = (await response.json()) as Partial<DailyCompletionRefreshApiResponse>;
 
       if (payload.status === 'refreshed' && typeof payload.completed === 'boolean') {
-        return payload.completed;
+        return {
+          completed: payload.completed,
+          isNewCompletion: payload.isNewCompletion === true,
+        };
       }
 
       return null;
@@ -726,6 +741,7 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
         }
 
         let completionText = 'Not linked';
+        let announceNewCompletion = false;
 
         if (callerLink?.verified) {
           await ensureGuildMembership(interaction, interaction.user.id);
@@ -744,8 +760,10 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
           } else {
             const refreshedCompletion = await refreshDailyCompletionFromApi(interaction.user.id);
 
-            if (typeof refreshedCompletion === 'boolean') {
-              completionText = refreshedCompletion ? 'Completed' : 'Not completed';
+            if (refreshedCompletion) {
+              completionText = refreshedCompletion.completed ? 'Completed' : 'Not completed';
+              announceNewCompletion =
+                refreshedCompletion.completed && refreshedCompletion.isNewCompletion;
             } else {
               completionText = existingCompletion?.completed ? 'Completed' : 'Not completed';
             }
@@ -766,6 +784,30 @@ export const createCoreSlashCommands = (services: BotCommandServices): SlashComm
         await interaction.editReply({
           embeds: [embed],
         });
+
+        if (announceNewCompletion && callerLink) {
+          try {
+            await interaction.followUp({
+              embeds: [
+                buildDailyCompletionAnnouncementEmbed(
+                  formatDailyCompletionAnnouncement({
+                    discordUserId: interaction.user.id,
+                    leetcodeUsername: callerLink.leetcodeUsername,
+                    mentionDiscordUser: callerLink.completionFeedMentionsEnabled,
+                  }),
+                ),
+              ],
+            });
+          } catch (error) {
+            commandLogger.warn(
+              {
+                err: error instanceof Error ? error.message : error,
+                discordUserId: interaction.user.id,
+              },
+              'Failed to send immediate daily completion announcement',
+            );
+          }
+        }
       },
     },
     {

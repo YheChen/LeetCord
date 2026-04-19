@@ -1,7 +1,7 @@
 import { REST } from '@discordjs/rest';
 import type { NewDailyCompletion } from '@leetcord/core';
 import { getPrismaClient } from '@leetcord/database';
-import { createLogger } from '@leetcord/shared';
+import { createLogger, formatDailyCompletionAnnouncement } from '@leetcord/shared';
 import { RESTPostAPIChannelMessageJSONBody, Routes } from 'discord-api-types/v10';
 
 const logger = createLogger({ name: 'job-post-completion-feed' });
@@ -63,9 +63,11 @@ export const runPostCompletionFeedJob = async (
             embeds: [
               {
                 color: 0x00b8a3,
-                description: completion.completionFeedMentionsEnabled
-                  ? `✅ <@${completion.discordUserId}> just completed today's daily!`
-                  : `✅ ${completion.leetcodeUsername} just completed today's daily!`,
+                description: formatDailyCompletionAnnouncement({
+                  discordUserId: completion.discordUserId,
+                  leetcodeUsername: completion.leetcodeUsername,
+                  mentionDiscordUser: completion.completionFeedMentionsEnabled,
+                }),
               },
             ],
           };
