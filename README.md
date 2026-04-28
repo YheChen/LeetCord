@@ -1,6 +1,6 @@
 ## LeetCord
 
-LeetCord is a Discord bot and backend stack for LeetCode communities. It lets users link their LeetCode accounts, view cached stats, track the daily problem, compete on leaderboards, track streaks, and post automated daily updates inside Discord servers.
+LeetCord is a Discord bot and backend stack for discord communities. It lets users link their LeetCode accounts, view cached stats, track the daily problem, compete on leaderboards, track streaks, and post automated daily updates inside Discord servers.
 
 This repository is a `pnpm`-powered TypeScript monorepo with separate apps for the Discord bot, HTTP API, and worker, plus shared packages for database access, domain services, and LeetCode integration.
 
