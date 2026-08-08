@@ -1,49 +1,94 @@
-version: "3.9"
+# LeetCord runs on SQLite. There is no database server — the whole database is the
+# single file ./data/leetcord.db on the host, bind-mounted into all four services.
+#
+# A bind mount is used rather than a named volume so the file sits at a path you can
+# point sqlite3, backups and `cp` at directly, without going through Docker.
+#
+# The `:z` suffix on that mount is required on SELinux distributions (Fedora, RHEL,
+# CentOS). Without it SELinux denies the containers access to ./data and Prisma fails
+# to open the database. Lowercase `z` applies a SHARED label — correct here, because
+# four containers mount the same directory. Uppercase `:Z` would relabel it privately
+# per container and break that sharing. It is harmless on non-SELinux hosts.
+#
+# The "version" key is intentionally absent; it is obsolete under Docker Compose v2
+# and only produces a warning.
+
+x-sqlite-env: &sqlite-env
+  # Set here rather than in .env so it always wins: values under `environment` take
+  # precedence over `env_file`, which guarantees a stale Supabase DATABASE_URL left
+  # in .env can never be picked up by a container.
+  DATABASE_URL: "file:/data/leetcord.db"
 
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: leetcord-postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: leetcord
-    ports:
-      - "5432:5432"
+  # One-shot: applies pending Prisma migrations, then exits. The long-running
+  # services wait for it to finish successfully, so `docker compose up` is
+  # self-sufficient on a fresh host — no manual migrate step.
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: leetcord-migrate
+    env_file:
+      - .env
+    environment: *sqlite-env
     volumes:
-      - leetcord-db-data:/var/lib/postgresql/data
+      - ./data:/data:z
+    command: ["pnpm", "--filter", "@leetcord/database", "prisma:migrate:deploy"]
+    restart: "no"
 
   api:
     build:
       context: .
       dockerfile: docker/Dockerfile.api
+    container_name: leetcord-api
     env_file:
       - .env
+    environment: *sqlite-env
+    volumes:
+      - ./data:/data:z
+    # Bound to loopback so the API is reachable from the host (and from the other
+    # containers via http://api:3000) but is not exposed to the rest of your LAN.
+    # Change to "3000:3000" only if you actually need off-host access.
+    ports:
+      - "127.0.0.1:3000:3000"
     depends_on:
-      - db
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
     command: ["pnpm", "--filter", "@leetcord/api", "start"]
 
   bot:
     build:
       context: .
       dockerfile: docker/Dockerfile.bot
+    container_name: leetcord-bot
     env_file:
       - .env
+    environment: *sqlite-env
+    volumes:
+      - ./data:/data:z
     depends_on:
-      - db
-      - api
+      migrate:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+    restart: unless-stopped
     command: ["pnpm", "--filter", "@leetcord/bot", "start"]
 
   worker:
     build:
       context: .
       dockerfile: docker/Dockerfile.worker
+    container_name: leetcord-worker
     env_file:
       - .env
+    environment: *sqlite-env
+    volumes:
+      - ./data:/data:z
     depends_on:
-      - db
-      - api
+      migrate:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+    restart: unless-stopped
     command: ["pnpm", "--filter", "@leetcord/worker", "start"]
-
-volumes:
-  leetcord-db-data:

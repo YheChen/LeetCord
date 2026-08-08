@@ -1,2 +1,0 @@
-ALTER TABLE "UserLink"
-ADD COLUMN IF NOT EXISTS "completionFeedMentionsEnabled" BOOLEAN NOT NULL DEFAULT true;

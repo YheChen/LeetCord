@@ -4,3 +4,19 @@ dist
 .env
 *.log
 pnpm-lock.yaml
+
+# SQLite database and its WAL sidecars. This is real user data (Discord IDs,
+# LeetCode usernames) and must never be committed. Back it up with
+# scripts/backup-db.sh instead.
+data/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# One-off Supabase -> SQLite migration dump. Also real user data.
+leetcord-export.json
+
+# Prisma client generated from the frozen postgres-export schema; contains a
+# platform-specific native query engine binary.
+packages/database/generated/

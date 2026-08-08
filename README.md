@@ -114,7 +114,7 @@ Then fill in the required values.
 | `DISCORD_CLIENT_ID` | Discord application client ID. |
 | `DISCORD_GUILD_ID` | Optional. If set, slash commands are registered to that one guild for fast development updates. |
 | `DISCORD_GUILD_IDS` | Optional. Comma-separated guild IDs for fast multi-server development registration. |
-| `DATABASE_URL` | PostgreSQL connection string. |
+| `DATABASE_URL` | SQLite database file, e.g. `file:/data/leetcord.db`. |
 | `API_PORT` | Port for the Fastify API. |
 | `BOT_PUBLIC_URL` | Base URL the bot uses to reach the API for verification and on-demand daily completion refreshes. |
 | `LEETCODE_FETCH_USER_AGENT` | User-agent string for LeetCode HTTP requests. |
@@ -135,20 +135,30 @@ DISCORD_GUILD_IDS=123456789012345678,987654321098765432
 
 #### `DATABASE_URL` examples
 
-- Docker Compose Postgres:
+LeetCord uses SQLite. The entire database is one file — there is no database server
+to run, and nothing to host.
+
+- Under Docker Compose, `docker-compose.yml` sets this for you and its value wins over
+  anything in `.env`:
 
 ```env
-DATABASE_URL=postgresql://postgres:postgres@db:5432/leetcord?schema=public
+DATABASE_URL=file:/data/leetcord.db
 ```
 
-- Local Postgres outside Docker:
+- Outside Docker, prefer an absolute path:
 
 ```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/leetcord?schema=public
+DATABASE_URL=file:/home/you/LeetCord/data/leetcord.db
 ```
 
-- Hosted Postgres or Supabase:
-  Use the exact connection string from your provider.
+> **Relative paths are resolved against `packages/database/prisma/`**, the directory
+> containing `schema.prisma` — not against your current working directory. So
+> `file:./data/leetcord.db` creates `packages/database/prisma/data/leetcord.db`, which
+> is rarely what you want. Use an absolute path unless you have a reason not to.
+
+The database file is gitignored, along with its `-wal` and `-shm` sidecars. It holds
+real user data, so keep it out of version control and back it up (see
+[Backups](#backups)).
 
 #### 3. Generate Prisma client and run migrations
 
@@ -196,8 +206,230 @@ pnpm build
 #### 6. Run with Docker
 
 ```bash
-docker-compose up --build
+docker compose up --build -d
 ```
+
+This starts four services. `migrate` runs `prisma migrate deploy` and exits; `api`,
+`bot` and `worker` wait for it to succeed, then stay up with `restart: unless-stopped`
+so they survive both crashes and host reboots.
+
+All four bind-mount `./data` from the host, which is where `leetcord.db` lives. Because
+it is a bind mount rather than a named volume, you can point `sqlite3`, backups and `cp`
+straight at `./data/leetcord.db` without going through Docker.
+
+Follow logs with:
+
+```bash
+docker compose logs -f bot worker
+```
+
+### Deployment
+
+#### Requirements on the host
+
+- Docker Engine with the Compose v2 plugin
+- `sqlite3` (for backups) — `sudo dnf install sqlite` on Fedora, `sudo apt install
+  sqlite3` on Debian/Ubuntu. Note the differing package names; both provide
+  `/usr/bin/sqlite3`.
+- A cron daemon. Fedora does not always install one — see
+  [Fedora host setup](#fedora-host-setup).
+
+Node.js and pnpm are **not** needed on the host. The Dockerfiles install and build
+everything inside the images, so the host only needs Docker.
+
+#### Fedora host setup
+
+Fedora differs from Debian/Ubuntu in three ways that will each break a deployment
+silently if missed.
+
+**1. SELinux.** Fedora runs SELinux in enforcing mode, and containers cannot write to
+an unlabeled bind mount. `docker-compose.yml` already mounts `./data` with the `:z`
+shared-label suffix, which handles this — but if you edit the volume lines, keep it.
+Symptom if lost: Prisma fails to open the database with a permission error even though
+the file's Unix permissions look fine. Confirm with `getenforce` (`Enforcing`) and
+check denials with `sudo ausearch -m avc -ts recent`.
+
+**2. Docker is not preinstalled.** Fedora ships Podman. `podman-compose` handles this
+file's `depends_on: condition: service_completed_successfully` unreliably, so install
+Docker CE:
+
+```bash
+sudo dnf -y install dnf-plugins-core
+sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+sudo dnf -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+```
+
+On Fedora 41+ (dnf5) the repo line is instead:
+
+```bash
+sudo dnf config-manager addrepo --from-repofile=https://download.docker.com/linux/fedora/docker-ce.repo
+```
+
+Optionally avoid `sudo` for docker commands (log out and back in afterwards):
+
+```bash
+sudo usermod -aG docker $USER
+```
+
+**3. cron may be absent.** Fedora minimal and Server installs often ship without
+`cronie`, so a crontab entry silently never runs:
+
+```bash
+sudo dnf -y install cronie
+sudo systemctl enable --now crond
+```
+
+#### Running a laptop as a server
+
+A ThinkPad suspends when you close the lid, which takes the bot offline. To keep it
+running with the lid shut, edit `/etc/systemd/logind.conf` and set:
+
+```ini
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+HandleLidSwitchDocked=ignore
+```
+
+Then `sudo systemctl restart systemd-logind`. Beware that this restarts your login
+session on some desktops — do it before you have anything unsaved.
+
+Also stop the machine idling into suspend:
+
+```bash
+sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+```
+
+The API binds to `127.0.0.1:3000`, so no firewall changes are needed and nothing is
+exposed to your LAN.
+
+#### Moving to a new machine
+
+The database is a file, so relocating LeetCord is: clone, copy `.env`, copy the `.db`
+file, bring it up.
+
+```bash
+git clone <your-remote> LeetCord
+cd LeetCord
+cp /path/to/old/.env .env
+mkdir -p data
+scp you@oldhost:/path/to/LeetCord/data/leetcord.db data/
+docker compose up --build -d
+```
+
+> **Do not copy `node_modules/`, `dist/`, or a generated Prisma client between machines
+> of different architectures.** The Prisma query engine is a native binary — an arm64
+> build from a Raspberry Pi will not run on an x86_64 host. The Dockerfiles run
+> `prisma generate` during the image build for exactly this reason, so a clean
+> `docker compose up --build` always produces the right binary.
+
+Stop the old host only after the new one is confirmed healthy.
+
+### Backups
+
+Supabase took care of this invisibly. A SQLite file on a single machine does not, so
+back it up.
+
+`scripts/backup-db.sh` snapshots the database with `sqlite3 .backup`, verifies the
+snapshot with `PRAGMA integrity_check`, compresses it, and prunes anything older than
+the retention window. It uses the online backup API rather than `cp`, which matters
+because the worker writes on a schedule and copying a live SQLite file can capture a
+torn page or miss the WAL.
+
+Run it by hand:
+
+```bash
+./scripts/backup-db.sh
+```
+
+Install it as a daily cron job at 03:30. The database file is root-owned because the
+containers run as root, so install this under root's crontab (`sudo crontab -e`) —
+a user crontab will fail with a permissions error:
+
+```cron
+30 3 * * * /home/you/LeetCord/scripts/backup-db.sh >> /var/log/leetcord-backup.log 2>&1
+```
+
+Configure with environment variables if the defaults do not suit:
+
+| Variable | Default | Description |
+| -------- | ------- | ----------- |
+| `LEETCORD_DB_PATH` | `<repo>/data/leetcord.db` | Database to back up. |
+| `LEETCORD_BACKUP_DIR` | `$HOME/leetcord-backups` | Where snapshots are written. |
+| `LEETCORD_BACKUP_RETAIN_DAYS` | `30` | Snapshots older than this are pruned. |
+
+Backups default to outside the repo so `git clean` cannot destroy them. Copying them
+periodically to a second machine or external disk is worth doing — a backup on the same
+disk as the database does not survive that disk failing.
+
+To restore, see the header comment in `scripts/backup-db.sh`.
+
+### Migrating from Supabase Postgres to SQLite
+
+One-off procedure, only relevant if you are moving an existing deployment. Everything
+runs inside Docker, so the host needs no Node or pnpm. The export only reads from
+Postgres and the import upserts on primary key, so the whole sequence is safe to
+rehearse and safe to repeat while the old deployment keeps running.
+
+Note that Supabase is reachable from anywhere with the connection string — if the old
+host has died, your data is still fine and this procedure still works.
+
+1. Add the old connection string to `.env`. Keep it separate from `DATABASE_URL`, which
+   now points at SQLite:
+
+```env
+POSTGRES_EXPORT_URL=postgresql://user:password@host:5432/postgres?sslmode=require
+```
+
+2. Build the images:
+
+```bash
+docker compose build
+```
+
+3. Create the SQLite database and its tables:
+
+```bash
+docker compose run --rm migrate
+```
+
+4. Export from Supabase. This generates the frozen Postgres client, then dumps every
+   table to `./data/leetcord-export.json` on the host (it lands in `./data` because that
+   directory is already bind-mounted into the container):
+
+```bash
+docker compose run --rm -e MIGRATION_FILE=/data/leetcord-export.json api sh -c "pnpm --filter @leetcord/database migrate:generate-pg-client && pnpm --filter @leetcord/database migrate:export"
+```
+
+5. Import the dump into SQLite:
+
+```bash
+docker compose run --rm -e MIGRATION_FILE=/data/leetcord-export.json api pnpm --filter @leetcord/database migrate:import
+```
+
+6. Verify the row counts look like your real data, then start everything:
+
+```bash
+sqlite3 data/leetcord.db "SELECT COUNT(*) FROM UserLink;"
+```
+
+```bash
+docker compose up -d
+```
+
+`MIGRATION_FILE` is used instead of the `--file` flag purely to avoid ambiguity over
+whether pnpm forwards the argument to the script or consumes it itself.
+
+If the old deployment is still live, re-run steps 4 and 5 at final cutover to pick up
+anything it recorded in the meantime — repeating the import will not duplicate rows.
+
+Afterwards, delete `data/leetcord-export.json` (it contains user data) and remove
+`POSTGRES_EXPORT_URL` from `.env`.
+
+Afterwards: delete `leetcord-export.json` (it contains user data), and keep the Supabase
+project paused rather than deleted for a week or so in case you need to roll back. Once
+you are confident, `packages/database/prisma/postgres-export.prisma`,
+`packages/database/scripts/` and the `POSTGRES_EXPORT_URL` entry in `.env` can all go.
 
 ### Expected startup logs
 
@@ -259,7 +491,7 @@ Users can run `/me` and use the button on their own stats response to disable co
 ### Development notes
 
 - All code is written in TypeScript with `strict` mode enabled.
-- Prisma is used for the PostgreSQL schema and client.
+- Prisma is used for the SQLite schema and client.
 - Zod is used for environment validation and external response validation.
 - `discord.js` powers the bot and only slash commands are used.
 - Keep this README in sync with user-facing feature and command changes.

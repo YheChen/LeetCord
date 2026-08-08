@@ -1,4 +1,4 @@
-import { DailyProblem, Prisma, PrismaClient, UserLink } from '@prisma/client';
+import { DailyProblem, PrismaClient, UserLink } from '@prisma/client';
 import {
   WeeklyLeaderboardEntry,
   WeeklyLeaderboardSnapshotPayload,
@@ -260,7 +260,7 @@ export class StatsSyncService {
       data: {
         guildId,
         weekStart,
-        payloadJson: payload as unknown as Prisma.InputJsonValue,
+        payloadJson: JSON.stringify(payload),
       },
     });
   }

@@ -10,7 +10,11 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json}\"",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "migrate:generate-pg-client": "prisma generate --schema prisma/postgres-export.prisma",
+    "migrate:export": "ts-node --project scripts/tsconfig.json scripts/export-postgres.ts",
+    "migrate:import": "ts-node --project scripts/tsconfig.json scripts/import-sqlite.ts",
     "test": "echo \"TODO: add database tests\""
   },
   "dependencies": {

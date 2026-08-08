@@ -1,10 +1,21 @@
+// FROZEN SNAPSHOT of the Postgres schema as it existed on Supabase, kept only so
+// the one-off data export can still run after schema.prisma switches to SQLite.
+//
+// Do NOT edit this to track new schema changes. It exists to read the old database
+// exactly as it was. Once the SQLite cutover is verified and the Supabase project is
+// deleted, this file, scripts/export-postgres.ts and the generated client can all go.
+//
+// Note the separate datasource env var: DATABASE_URL now points at the SQLite file,
+// so the exporter reads POSTGRES_EXPORT_URL instead.
+
 generator client {
   provider = "prisma-client-js"
+  output   = "../generated/postgres-client"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("POSTGRES_EXPORT_URL")
 }
 
 model UserLink {
@@ -102,10 +113,7 @@ model WeeklyLeaderboardSnapshot {
   id        String   @id @default(cuid())
   guildId   String
   weekStart DateTime
-  // Serialized WeeklyLeaderboardSnapshotPayload. Stored as a String rather than Json
-  // because the SQLite connector has no Json type; see StatsSyncService (write) and
-  // LeaderboardService (read), which stringify/parse around this field.
-  payloadJson String
+  payloadJson Json
   createdAt DateTime @default(now())
 
   @@index([guildId, weekStart])

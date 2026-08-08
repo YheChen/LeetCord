@@ -114,7 +114,14 @@ export class LeaderboardService {
       return null;
     }
 
-    const payload = snapshot.payloadJson;
+    let payload: unknown;
+    try {
+      payload = JSON.parse(snapshot.payloadJson);
+    } catch (error) {
+      logger.warn({ guildId, err: error }, 'Weekly snapshot payload is not valid JSON');
+      return null;
+    }
+
     if (!isWeeklyLeaderboardSnapshotPayload(payload)) {
       logger.warn({ guildId }, 'Weekly snapshot payload has unexpected shape');
       return null;

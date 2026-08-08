@@ -12,6 +12,9 @@
     "format": "pnpm -r run format",
     "prisma:generate": "pnpm --filter @leetcord/database prisma:generate",
     "prisma:migrate": "pnpm --filter @leetcord/database prisma:migrate:dev",
+    "prisma:deploy": "pnpm --filter @leetcord/database prisma:migrate:deploy",
+    "migrate:export": "pnpm --filter @leetcord/database migrate:export",
+    "migrate:import": "pnpm --filter @leetcord/database migrate:import",
     "test": "pnpm -r run test"
   },
   "devDependencies": {
