@@ -234,8 +234,12 @@ docker compose logs -f bot worker
 - A cron daemon. Fedora does not always install one — see
   [Fedora host setup](#fedora-host-setup).
 
-Node.js and pnpm are **not** needed on the host. The Dockerfiles install and build
-everything inside the images, so the host only needs Docker.
+Node.js and pnpm are **not** needed on the host. `docker/Dockerfile` installs and
+builds everything inside the image, so the host only needs Docker.
+
+All four services share one image, built once from `docker/Dockerfile` and differing
+only in the command they run. Only the `migrate` service declares a `build:` block, so
+`docker compose build` produces exactly one image rather than four near-identical ones.
 
 #### Fedora host setup
 
@@ -319,7 +323,7 @@ docker compose up --build -d
 
 > **Do not copy `node_modules/`, `dist/`, or a generated Prisma client between machines
 > of different architectures.** The Prisma query engine is a native binary — an arm64
-> build from a Raspberry Pi will not run on an x86_64 host. The Dockerfiles run
+> build from a Raspberry Pi will not run on an x86_64 host. The Dockerfile runs
 > `prisma generate` during the image build for exactly this reason, so a clean
 > `docker compose up --build` always produces the right binary.
 
