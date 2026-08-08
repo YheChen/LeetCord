@@ -9,7 +9,9 @@ COPY package.json pnpm-workspace.yaml tsconfig.base.json .eslintrc.cjs .prettier
 COPY packages ./packages
 COPY apps ./apps
 
-RUN corepack enable pnpm && pnpm install --recursive --silent
+# See Dockerfile.api — pnpm is pinned because an unpinned corepack install resolves to
+# pnpm 11, which requires Node >= 22.13. Keep in step with the root package.json.
+RUN npm install -g pnpm@10.31.0 && pnpm install --recursive --silent
 
 # See Dockerfile.api — the Prisma query engine is architecture-specific and must be
 # generated here rather than copied from the arm64 Raspberry Pi.
