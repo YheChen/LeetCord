@@ -256,13 +256,18 @@ export class StatsSyncService {
       entries,
     };
 
-    await this.db.weeklyLeaderboardSnapshot.create({
-      data: {
-        guildId,
-        weekStart,
-        payloadJson: JSON.stringify(payload),
-      },
-    });
+    // Replace this guild's snapshot for the current week rather than appending one.
+    // This job runs hourly, so appending would add ~168 rows per guild per week.
+    await this.db.$transaction([
+      this.db.weeklyLeaderboardSnapshot.deleteMany({ where: { guildId, weekStart } }),
+      this.db.weeklyLeaderboardSnapshot.create({
+        data: {
+          guildId,
+          weekStart,
+          payloadJson: JSON.stringify(payload),
+        },
+      }),
+    ]);
   }
 
   private async refreshDailyCompletionForLink(
